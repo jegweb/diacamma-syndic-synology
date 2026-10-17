@@ -1,0 +1,11 @@
+# Liste blanche : seuls ces fichiers entrent dans le contexte de construction
+# (jamais data/, backups/, secrets/ ni .env).
+*
+!Dockerfile
+!requirements.lock
+!docker/
+**/__pycache__
+# Métadonnées ajoutées par DSM (File Station) et par macOS lors d'une copie.
+**/@eaDir
+**/._*
+**/.DS_Store

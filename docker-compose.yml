@@ -1,0 +1,61 @@
+# Diacamma Syndic : projet pour Synology Container Manager (base SQLite).
+# Réglages dans le fichier .env (copie de .env.example), voir README.md.
+name: diacamma-syndic
+
+x-diacamma: &diacamma
+  # Image construite localement : elle n'existe sur aucun registre.
+  image: diacamma-syndic:local
+  user: "${PUID:-1026}:${PGID:-100}"
+  restart: unless-stopped
+  read_only: true
+  tmpfs:
+    - /tmp:size=512m,mode=1777
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  environment:
+    TZ: ${TZ:-Europe/Paris}
+    DIACAMMA_ALLOWED_HOSTS: ${DIACAMMA_ALLOWED_HOSTS:-}
+    DIACAMMA_HTTPS: ${DIACAMMA_HTTPS:-true}
+    DIACAMMA_LANGUAGE: ${DIACAMMA_LANGUAGE:-fr}
+    DIACAMMA_ADMIN_PASSWORD: ${DIACAMMA_ADMIN_PASSWORD:-}
+    DIACAMMA_EXTRA_SETTINGS: ${DIACAMMA_EXTRA_SETTINGS:-}
+    GUNICORN_THREADS: ${GUNICORN_THREADS:-4}
+    BACKUP_TIME: ${BACKUP_TIME:-02:30}
+    BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-30}
+  volumes:
+    - ./data:/data
+    - ./backups:/backups
+  # Pas de section « logging » : Container Manager n'affiche que les journaux
+  # écrits par le pilote par défaut de Synology, pas ceux de json-file.
+
+services:
+  diacamma:
+    <<: *diacamma
+    container_name: diacamma-syndic
+    build:
+      context: .
+    # Construire au lieu de télécharger : sinon Container Manager échoue avec
+    # « pull access denied for diacamma-syndic ».
+    pull_policy: build
+    # Publié sur 127.0.0.1 : seul le proxy inverse DSM (HTTPS) y accède.
+    ports:
+      - "${DIACAMMA_BIND:-127.0.0.1}:${DIACAMMA_PORT:-8100}:8000"
+    mem_limit: 1g
+
+  sauvegarde:
+    <<: *diacamma
+    container_name: diacamma-syndic-sauvegarde
+    # Réutilise l'image construite pour le service diacamma.
+    pull_policy: never
+    command: ["backup-daemon"]
+    mem_limit: 512m
+    # « started » et non « healthy » : si l'application échoue au démarrage, le
+    # projet reste créé et son journal visible dans Container Manager. Le service
+    # vérifie lui-même que l'instance est prête avant chaque sauvegarde.
+    depends_on:
+      diacamma:
+        condition: service_started
+    healthcheck:
+      disable: true

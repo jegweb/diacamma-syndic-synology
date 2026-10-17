@@ -1,0 +1,271 @@
+#!/bin/bash
+# Point d'entrée et outil d'administration du conteneur Diacamma Syndic.
+# Usage : diacamma <commande> [arguments]   (voir « diacamma help »)
+set -Eeuo pipefail
+umask 0077
+
+readonly DATA_DIR=/data
+readonly BACKUP_DIR=/backups
+readonly LIB_DIR=/opt/diacamma/lib
+readonly INSTANCE="${DIACAMMA_INSTANCE:-syndic}"
+readonly INSTANCE_DIR="$DATA_DIR/$INSTANCE"
+readonly SETTINGS="$INSTANCE_DIR/settings.py"
+readonly APPLI=diacamma.syndic
+readonly MODULES=lucterios.contacts,lucterios.documents,lucterios.mailing,diacamma.accounting,diacamma.payoff,diacamma.condominium
+# Identifiant des versions installées dans l'image ; recopié dans /data une
+# fois les migrations et collectstatic réussis.
+BUILD_ID="$(cat /opt/diacamma/diacamma-build-id)"
+readonly BUILD_ID
+readonly BUILD_MARKER="$DATA_DIR/.diacamma-build-id"
+
+# Utilisé par gunicorn et par les archives lancées depuis l'interface.
+export DJANGO_SETTINGS_MODULE="$INSTANCE.settings"
+
+log() { printf '[diacamma] %s\n' "$*" >&2; }
+die() { log "ERREUR : $*"; exit 1; }
+
+lucterios_admin() { (cd "$DATA_DIR" && python -m lucterios.install.lucterios_admin "$@" -i "$DATA_DIR"); }
+manage() { (cd "$DATA_DIR" && python "$DATA_DIR/manage_$INSTANCE.py" "$@"); }
+helper() { python "$LIB_DIR/diacamma_docker.py" "$@"; }
+
+check_instance_name() {
+  [[ "$INSTANCE" =~ ^[a-z][a-z0-9_]{0,30}$ ]] \
+    || die "DIACAMMA_INSTANCE doit contenir uniquement des minuscules, chiffres ou « _ » (reçu : « $INSTANCE »)."
+}
+
+# Explique un défaut de droits sur $1, puis arrête le conteneur.
+permission_error() {
+  local path="$1" owner me
+  me="$(id -u):$(id -g)"
+  owner="$(stat -c '%u:%g' "$path" 2>/dev/null || echo inconnu)"
+  log "ERREUR : $path (propriétaire $owner) n'est pas accessible en écriture pour l'utilisateur $me du conteneur."
+  if [[ "${owner%%:*}" == "$(id -u)" ]]; then
+    # Propriétaire correct mais écriture refusée : ACL DSM. Le conteneur n'a
+    # pas les groupes secondaires du compte (administrators…).
+    log "Il appartient bien à cet utilisateur : ce sont ses droits ou les ACL de DSM qui refusent l'écriture."
+    log "Solution : en SSH, depuis le dossier du projet sur le NAS : sudo chmod -R u+rwX data backups"
+    log "Si cela ne suffit pas (ACL) : File Station > clic droit sur le dossier du projet > Propriétés > Autorisation : donner Lecture/Écriture à ce compte (pas seulement via un groupe), appliquer aux sous-dossiers et fichiers."
+  else
+    log "Solution : en SSH, depuis le dossier du projet sur le NAS : sudo chown -R $me data backups"
+    if [[ "$owner" != 0:* && "$owner" != inconnu ]]; then
+      log "Ou bien indiquez PUID=${owner%%:*} et PGID=${owner##*:} dans .env, puis redémarrez le projet."
+    fi
+  fi
+  die "voir README, section « Permissions »."
+}
+
+check_writable() {
+  local dir probe path
+  for dir in "$DATA_DIR" "$BACKUP_DIR"; do
+    probe="$dir/.test-ecriture-$$"
+    ( : > "$probe" ) 2>/dev/null || permission_error "$dir"
+    rm -f "$probe"
+  done
+  # Fichiers laissés par une tentative précédente (autre UID, ACL…).
+  for path in "$INSTANCE_DIR" "$INSTANCE_DIR/db.sqlite3"; do
+    [[ ! -e "$path" || -w "$path" ]] || permission_error "$path"
+  done
+}
+
+db_engine() { echo "${DIACAMMA_DB_ENGINE:-sqlite}"; }
+
+# Chaîne de connexion au format lucterios_admin (-d). Lucterios l'écrit telle
+# quelle dans settings.py : seuls des caractères sûrs sont acceptés.
+database_arg() {
+  case "$(db_engine)" in
+    sqlite) echo sqlite ;;
+    postgresql)
+      local password="${DIACAMMA_DB_PASSWORD:-}" name value
+      if [[ -n "${DIACAMMA_DB_PASSWORD_FILE:-}" ]]; then
+        [[ -r "$DIACAMMA_DB_PASSWORD_FILE" ]] || die "fichier de mot de passe illisible : $DIACAMMA_DB_PASSWORD_FILE."
+        password="$(<"$DIACAMMA_DB_PASSWORD_FILE")"
+      fi
+      [[ "$password" =~ ^[A-Za-z0-9._~+-]{12,}$ ]] \
+        || die "le mot de passe PostgreSQL doit faire au moins 12 caractères parmi A-Z a-z 0-9 . _ ~ + -."
+      for name in DIACAMMA_DB_HOST DIACAMMA_DB_NAME DIACAMMA_DB_USER; do
+        value="${!name:-}"
+        [[ "$value" =~ ^[A-Za-z0-9._-]+$ ]] || die "$name est vide ou contient des caractères non autorisés."
+      done
+      [[ "${DIACAMMA_DB_PORT:-5432}" =~ ^[0-9]+$ ]] || die "DIACAMMA_DB_PORT doit être un nombre."
+      echo "postgresql:name=$DIACAMMA_DB_NAME,user=$DIACAMMA_DB_USER,password=$password,host=$DIACAMMA_DB_HOST,port=${DIACAMMA_DB_PORT:-5432}"
+      ;;
+    *) die "DIACAMMA_DB_ENGINE doit valoir sqlite ou postgresql." ;;
+  esac
+}
+
+# Moteur réellement utilisé par l'instance existante (lu dans settings.py).
+instance_engine() {
+  if grep -q 'django.db.backends.sqlite3' "$SETTINGS"; then echo sqlite
+  elif grep -q 'django.db.backends.postgresql' "$SETTINGS"; then echo postgresql
+  else echo inconnu
+  fi
+}
+
+create_instance() {
+  local extra="$1" database
+  # Affectation séparée : un échec de database_arg arrête le script (set -e).
+  database="$(database_arg)"
+  [[ ! -e "$DATA_DIR/manage_$INSTANCE.py" ]] \
+    || die "$DATA_DIR/manage_$INSTANCE.py existe sans $SETTINGS : dossier de données incohérent."
+  log "Première initialisation de l'instance « $INSTANCE » (base $(db_engine)) ; cela peut prendre plusieurs minutes…"
+  lucterios_admin add -n "$INSTANCE" -p "$APPLI" -m "$MODULES" -d "$database" -e "$extra"
+}
+
+update_instance() {
+  local extra="$1" engine previous snapshot
+  engine="$(instance_engine)"
+  [[ "$engine" == "$(db_engine)" ]] \
+    || die "l'instance existante utilise la base « $engine » mais DIACAMMA_DB_ENGINE vaut « $(db_engine) ». Pour changer de base, passez par une archive (README, « Changer de base de données »)."
+  previous="$(cat "$BUILD_MARKER" 2>/dev/null || true)"
+  if [[ -z "$previous" ]]; then
+    # Aucun démarrage réussi encore (tentatives interrompues) ou données importées.
+    log "Instance existante sans démarrage réussi enregistré : reprise de l'initialisation."
+  elif [[ "$previous" != "$BUILD_ID" ]]; then
+    log "Mise à jour détectée : $previous -> $BUILD_ID."
+    if [[ "$engine" == sqlite ]]; then
+      mkdir -p "$BACKUP_DIR/avant-mise-a-jour"
+      snapshot="$BACKUP_DIR/avant-mise-a-jour/${INSTANCE}_$(date +%Y%m%d-%H%M%S).tar.gz"
+      helper snapshot-sqlite "$INSTANCE" "$snapshot"
+      log "Instantané de sécurité créé : $snapshot"
+    else
+      log "Base PostgreSQL : pas d'instantané automatique, assurez-vous d'avoir une sauvegarde récente."
+    fi
+  fi
+  # modif réécrit settings.py (clé secrète et base conservées) puis applique les migrations.
+  lucterios_admin modif -n "$INSTANCE" -e "$extra"
+}
+
+collect_static() {
+  if [[ "$(cat "$BUILD_MARKER" 2>/dev/null)" != "$BUILD_ID" || ! -d "$INSTANCE_DIR/static" ]]; then
+    log "Collecte des fichiers statiques…"
+    # Le répertoire de l'instance fait partie de STATICFILES_DIRS : on exclut
+    # ses contenus (documents, base, réglages), puis clean-static vérifie.
+    manage collectstatic --noinput --clear -v 0 \
+      -i usr -i tmp -i static -i django_cache -i __pycache__ \
+      -i settings.py -i __init__.py -i '*.sqlite3*' -i '*.log'
+  fi
+  helper clean-static "$INSTANCE"
+}
+
+serve() {
+  local extra threads="${GUNICORN_THREADS:-4}" timeout="${GUNICORN_TIMEOUT:-600}"
+  [[ "$threads" =~ ^[1-9][0-9]?$ ]] || die "GUNICORN_THREADS doit être un entier entre 1 et 99."
+  [[ "$timeout" =~ ^[1-9][0-9]*$ ]] || die "GUNICORN_TIMEOUT doit être un entier positif."
+  check_instance_name
+  check_writable
+  extra="$(helper extra-settings)"
+  if [[ -f "$SETTINGS" ]]; then
+    update_instance "$extra"
+  else
+    create_instance "$extra"
+  fi
+  helper secure-admin "$INSTANCE"
+  collect_static
+  chmod 0600 "$SETTINGS"
+  echo "$BUILD_ID" > "$BUILD_MARKER"
+  log "Démarrage de Diacamma Syndic ($BUILD_ID)."
+  # Un seul processus : le planificateur interne (envoi des courriels par
+  # lots, archives, clôtures) vit dans le processus web.
+  exec gunicorn diacamma_wsgi:application \
+    --bind 0.0.0.0:8000 \
+    --workers 1 --worker-class gthread --threads "$threads" \
+    --timeout "$timeout" --graceful-timeout 30 \
+    --access-logfile - --error-logfile - \
+    --access-logformat '%({x-forwarded-for}i)s "%(r)s" %(s)s %(b)s %(M)sms "%(a)s"'
+}
+
+require_ready() {
+  [[ -f "$SETTINGS" ]] || die "l'instance n'est pas encore initialisée (démarrez d'abord le service principal)."
+  [[ "$(cat "$BUILD_MARKER" 2>/dev/null)" == "$BUILD_ID" ]] \
+    || die "l'instance n'est pas encore migrée vers $BUILD_ID (attendez la fin du démarrage du service principal)."
+}
+
+# Archive Lucterios (.lbk) : base et documents, restaurable depuis l'interface.
+backup() {
+  local prefix="${1:-manuel}" name final partial
+  require_ready
+  name="${prefix}_${INSTANCE}_$(date +%Y%m%d-%H%M%S)"
+  final="$BACKUP_DIR/$name.lbk"
+  partial="$BACKUP_DIR/.$name.lbk.part"
+  log "Sauvegarde vers $final…"
+  if lucterios_admin archive -n "$INSTANCE" -f "$partial" && [[ -s "$partial" ]]; then
+    mv "$partial" "$final"
+    log "Sauvegarde terminée : $final"
+  else
+    rm -f "$partial"
+    log "ERREUR : la sauvegarde a échoué."
+    return 1
+  fi
+}
+
+prune_backups() {
+  local keep="$1"
+  (( keep > 0 )) || return 0
+  find "$BACKUP_DIR" -maxdepth 1 -type f -name "auto_${INSTANCE}_*.lbk" -mtime +"$keep" -print -delete \
+    | sed 's/^/[diacamma] Sauvegarde expirée supprimée : /' >&2
+}
+
+backup_daemon() {
+  local at="${BACKUP_TIME:-02:30}" keep="${BACKUP_KEEP_DAYS:-30}" now next
+  [[ "$at" =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]] || die "BACKUP_TIME doit être au format HH:MM."
+  [[ "$keep" =~ ^[0-9]+$ ]] || die "BACKUP_KEEP_DAYS doit être un entier (0 = ne jamais supprimer)."
+  check_instance_name
+  check_writable
+  trap 'log "Arrêt du service de sauvegarde."; exit 0' TERM INT
+  log "Sauvegarde automatique chaque jour à $at (${TZ:-UTC}), conservation $keep jours."
+  while true; do
+    now="$(date +%s)"
+    next="$(date -d "today $at" +%s)"
+    (( next > now )) || next="$(date -d "tomorrow $at" +%s)"
+    sleep $(( next - now )) &
+    wait $!
+    if ( require_ready ) 2>/dev/null; then
+      backup auto || true
+      prune_backups "$keep"
+    else
+      log "Sauvegarde du jour ignorée : instance absente ou démarrage en cours."
+    fi
+  done
+}
+
+restore() {
+  local file="${1:-}"
+  [[ -n "$file" ]] || die "usage : diacamma restore <fichier.lbk>"
+  [[ "$file" == /* ]] || file="$BACKUP_DIR/$file"
+  [[ -f "$file" ]] || die "archive introuvable : $file"
+  require_ready
+  log "Restauration de $file : les données actuelles vont être remplacées."
+  lucterios_admin restore -n "$INSTANCE" -f "$file"
+  helper secure-admin "$INSTANCE"
+  log "Restauration terminée. Redémarrez le conteneur pour repartir d'un état propre."
+}
+
+usage() {
+  cat <<'EOF'
+Usage : diacamma <commande> [arguments]
+
+  serve                     Initialise ou met à jour l'instance, puis lance le serveur (défaut)
+  backup                    Crée une archive manuelle (.lbk) dans /backups
+  backup-daemon             Sauvegarde automatique quotidienne (service de sauvegarde)
+  restore <fichier.lbk>     Restaure une archive de /backups (remplace les données)
+  reset-admin-password      Génère un nouveau mot de passe pour le compte « admin »
+  version                   Affiche les versions de Diacamma et Lucterios
+  manage <arguments>        Commande Django (manage.py) de l'instance
+  admin <arguments>         Commande lucterios_admin (avancé)
+EOF
+}
+
+command="${1:-serve}"
+(( $# > 0 )) && shift
+case "$command" in
+  serve) serve ;;
+  backup) backup manuel ;;
+  backup-daemon) backup_daemon ;;
+  restore) restore "$@" ;;
+  reset-admin-password) require_ready; helper reset-admin-password "$INSTANCE" ;;
+  version) echo "Build : $BUILD_ID"; grep -iE '^(diacamma|lucterios|django)' /opt/diacamma/versions.txt ;;
+  manage) manage "$@" ;;
+  admin) lucterios_admin "$@" ;;
+  help|-h|--help) usage ;;
+  *) usage >&2; exit 64 ;;
+esac

@@ -1,0 +1,7 @@
+/data/
+/backups/
+/postgresql/
+/secrets/
+/dist/
+.env
+__pycache__/
