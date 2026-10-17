@@ -82,7 +82,7 @@ Les autres réglages (heure et durée de conservation des sauvegardes, mot de pa
 1. **Container Manager** → **Projet** → **Créer**.
 2. Nom du projet : `diacamma-syndic`. Chemin : `/docker/diacamma-syndic`.
 3. Source : **utiliser le fichier `docker-compose.yml` existant**.
-4. N'activez pas le portail web (Web Station) : l'accès passe par le proxy inverse (étape suivante).
+4. Cochez **Configurer le portail Web via Web Station**. Les valeurs à saisir sont détaillées dans [Accès en HTTPS](#accès-en-https).
 5. Validez. Container Manager construit l'image, ce qui prend 5 à 20 minutes selon le NAS, puis démarre les deux conteneurs.
 
 La première initialisation (création de la base) prend encore une à quelques minutes. Le conteneur `diacamma-syndic` passe ensuite à l'état « sain » (*healthy*).
@@ -110,9 +110,36 @@ Le compte par défaut de Diacamma (`admin` / `admin`) n'est jamais laissé actif
 
 ## Accès en HTTPS
 
-Par défaut, l'application n'écoute que sur `127.0.0.1:8100` : elle n'est accessible qu'à travers le proxy inverse de DSM, qui gère le HTTPS (option A). L'option B fait passer l'accès par le proxy inversé de la box, au prix d'une sécurité moindre sur le réseau local.
+Le conteneur ne parle que **HTTP**, sur le port **8100** du NAS, et seulement pour le NAS lui-même (`127.0.0.1:8100:8000` dans `docker-compose.yml`). Le HTTPS est assuré par DSM, qui reçoit les visiteurs sur le port 443 et leur transmet les pages du conteneur :
 
-### Option A : proxy inversé DSM (recommandé)
+```text
+navigateur ──HTTPS, port 443──▶ DSM (Web Station, certificat) ──HTTP, port 8100──▶ conteneur
+             └── côté portail : HTTPS, 443 ──┘                  └── côté service : HTTP, 8100 ──┘
+```
+
+Règle à retenir : **HTTPS et 443 se règlent côté portail** (ce que voit le navigateur), **HTTP et 8100 côté service** (le conteneur). Le port 8000, interne au conteneur, ne se saisit jamais.
+
+L'option B fait passer l'accès par le proxy inversé de la box, au prix d'une sécurité moindre sur le réseau local.
+
+### Option A : portail Web Station (recommandé)
+
+À la création du projet, l'assistant de Container Manager propose de « Configurer le portail Web via Web Station ». On peut aussi le faire après coup dans **Web Station** → **Portail Web** → **Créer** → portail de services.
+
+| Où | Réglage | Valeur |
+| --- | --- | --- |
+| Service (Container Manager) | Conteneur et port | `diacamma-syndic`, port **8100**, protocole **HTTP** |
+| Portail (Web Station) | Type de portail | **Basé sur le nom** |
+| Portail (Web Station) | Nom d'hôte | `syndic.mondomaine.fr` |
+| Portail (Web Station) | Port | **HTTPS 443**. Le port HTTP 80 est facultatif. |
+| Panneau de configuration → Sécurité → Certificat → **Paramètres** | Certificat du portail | le certificat de `syndic.mondomaine.fr` (Let's Encrypt) |
+| Box | Redirection de ports | 443 vers le NAS, et 80 si DSM doit obtenir ou renouveler un certificat Let's Encrypt |
+| `.env` | Réglages Diacamma | `DIACAMMA_ALLOWED_HOSTS=syndic.mondomaine.fr` et `DIACAMMA_HTTPS=true` |
+
+Les libellés exacts peuvent varier selon la version de DSM. Si des personnes doivent se connecter depuis Internet, la redirection de ports de la box est nécessaire. Sinon, gardez l'accès limité au réseau local ou à un VPN.
+
+### Variante de l'option A : proxy inversé du Panneau de configuration
+
+Même principe, sans Web Station. Utilisez l'un **ou** l'autre pour un même nom de domaine, pas les deux.
 
 1. **Panneau de configuration** → **Portail de connexion** → **Avancé** → **Proxy inversé** → **Créer** :
    - Source : protocole `HTTPS`, nom d'hôte `syndic.mondomaine.fr`, port `443`. Vous pouvez cocher HSTS.
@@ -128,15 +155,15 @@ Votre box a un proxy inversé et vous voulez l'utiliser, par exemple parce que s
 
 Ici, la box transmet directement au conteneur, sans passer par DSM.
 
-1. Dans `.env` (voir le bloc « Option B » de `.env.example`) :
-   - remplacez `DIACAMMA_BIND=127.0.0.1` par `DIACAMMA_BIND=0.0.0.0` ;
+1. Dans `docker-compose.yml`, ligne `ports`, remplacez `"127.0.0.1:8100:8000"` par `"8100:8000"`.
+2. Dans `.env` (voir le bloc « Option B » de `.env.example`) :
    - gardez `DIACAMMA_HTTPS=true` ;
    - si la box réécrit l'en-tête `Host`, ajoutez l'IP du NAS à `DIACAMMA_ALLOWED_HOSTS`, par exemple `syndic.mondomaine.fr,192.168.1.10`.
-2. Redémarrez le projet dans Container Manager.
-3. Dans la box, créez une règle de proxy inversé :
+3. Recréez le projet : relancez sa construction dans Container Manager. Un simple redémarrage ne relit ni `.env` ni le compose.
+4. Dans la box, créez une règle de proxy inversé :
    - source `https://syndic.mondomaine.fr`, avec un certificat valide (Let's Encrypt par exemple) ;
    - destination `http://<IP-du-NAS>:8100`.
-4. Si la box le permet :
+5. Si la box le permet :
    - envoyez l'en-tête `X-Forwarded-Proto: https`. Sans lui, seuls certains liens dans les courriels sont touchés ;
    - passez le délai d'attente à 300 secondes ;
    - autorisez des envois assez gros pour l'import d'archives `.lbk`.
@@ -147,7 +174,13 @@ Ici, la box transmet directement au conteneur, sans passer par DSM.
 
 ### Essai sur le réseau local
 
-Pour un simple essai sur le réseau local, sans HTTPS : dans `.env`, mettez `DIACAMMA_BIND=0.0.0.0` et `DIACAMMA_HTTPS=false`, ajoutez l'adresse IP du NAS à `DIACAMMA_ALLOWED_HOSTS`, puis ouvrez `http://<ip-du-nas>:8100`. Ne laissez pas cette configuration en production.
+Pour un simple essai sur le réseau local, sans HTTPS :
+
+1. Dans `docker-compose.yml`, remplacez `"127.0.0.1:8100:8000"` par `"8100:8000"`.
+2. Dans `.env`, mettez `DIACAMMA_HTTPS=false` et ajoutez l'adresse IP du NAS à `DIACAMMA_ALLOWED_HOSTS`.
+3. Recréez le projet, puis ouvrez `http://<ip-du-nas>:8100`.
+
+Ne laissez pas cette configuration en production.
 
 ## Sauvegardes et restauration
 

@@ -49,6 +49,7 @@ Points à vérifier après une modification : `/static/settings.py` et `/static/
 ### Contraintes propres à Synology (constatées sur un NAS Synology, noyau 4.4)
 
 - **Pas de section `logging`** dans le compose. Container Manager n'affiche que les journaux écrits par le pilote par défaut de Synology (un `log.db` par conteneur). Avec `json-file`, l'onglet Journal reste vide.
+- **Port publié en valeur fixe** (`"127.0.0.1:8100:8000"`), sans variable. L'assistant « portail Web via Web Station » de Container Manager lit le compose lui-même et ne propose aucun service si la ligne `ports` contient `${…}`. Web Station accepte en revanche un port publié sur `127.0.0.1`.
 - **Pas de `pids_limit`** : le noyau ne gère pas cette limite (avertissement « PIDs limit discarded »).
 - **`pull_policy: build` / `never`** : sans cela, Container Manager tente de télécharger `diacamma-syndic:local` et échoue.
 - **`sauvegarde` dépend de `diacamma` en `service_started`, pas `service_healthy`.** Container Manager affiche tout échec de `compose up` comme « Build project failed », sans garder de conteneur dont on puisse lire le journal. Les erreurs de démarrage doivent laisser le conteneur visible, en redémarrage, avec un message `[diacamma] ERREUR` explicite.

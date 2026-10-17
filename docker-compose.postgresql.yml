@@ -75,8 +75,11 @@ services:
     # Construire au lieu de télécharger : sinon Container Manager échoue avec
     # « pull access denied for diacamma-syndic ».
     pull_policy: build
+    # Valeur fixe : l'assistant « portail Web » de Container Manager ne lit pas
+    # les variables. 127.0.0.1 : seul DSM (Web Station ou proxy inversé) y accède.
+    # Proxy de la box (option B) ou essai en HTTP sur le réseau local : "8100:8000".
     ports:
-      - "${DIACAMMA_BIND:-127.0.0.1}:${DIACAMMA_PORT:-8100}:8000"
+      - "127.0.0.1:8100:8000"
     mem_limit: 1g
     depends_on:
       db:
