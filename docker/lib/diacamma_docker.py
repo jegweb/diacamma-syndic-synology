@@ -2,6 +2,7 @@
 
 Usage : python diacamma_docker.py <commande> [arguments]
 """
+import ipaddress
 import json
 import os
 import re
@@ -80,6 +81,32 @@ def allowed_hosts():
     return hosts
 
 
+def is_ip_address(host):
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return True
+
+
+def root_url(hosts, https):
+    """Adresse du site dans les liens envoyés par courriel (LUCTERIOS_ROOT_URL).
+
+    Sans elle, Lucterios retient l'adresse de la première requête qui en a besoin,
+    jusqu'au redémarrage suivant, et les envois par lots repris au démarrage partent
+    avec des liens incomplets. On prend le premier nom de DIACAMMA_ALLOWED_HOSTS qui
+    n'est pas une adresse IP. En HTTP (essai local, port 8100), on ne la fixe pas :
+    le port compte dans l'adresse.
+    """
+    if not https:
+        return ''
+    for host in hosts:
+        if host in ('localhost', '*') or host.startswith('.') or is_ip_address(host):
+            continue
+        return f'https://{host}'
+    return ''
+
+
 def check_admin_password():
     password = os.environ.get('DIACAMMA_ADMIN_PASSWORD', '')
     if password and len(password) < 12:
@@ -102,11 +129,14 @@ def extra_settings():
     except (ZoneInfoNotFoundError, ValueError):
         fail(f'fuseau horaire TZ inconnu : {time_zone!r}.')
     https = env_bool('DIACAMMA_HTTPS', True)
+    hosts = allowed_hosts()
     extra = {
         'DEBUG': False,
         'LANGUAGE_CODE': language,
         'TIME_ZONE': time_zone,
-        'ALLOWED_HOSTS': allowed_hosts(),
+        'ALLOWED_HOSTS': hosts,
+        # Toujours écrite, même vide : « modif » conserve sinon une ancienne valeur.
+        'LUCTERIOS_ROOT_URL': root_url(hosts, https),
         'BACKUP_DIRECTORY': str(BACKUP_DIR),
         'BACKUP_READONLY': env_bool('DIACAMMA_BACKUP_READONLY', False),
         'SESSION_COOKIE_SECURE': https,
@@ -129,6 +159,8 @@ def extra_settings():
     for key, value in extra.items():
         if isinstance(value, str) and UNSAFE_CHARS & set(value):
             fail(f'la valeur de {key} contient un caractère interdit (guillemet, antislash ou saut de ligne).')
+    if extra['LUCTERIOS_ROOT_URL']:
+        log(f'Adresse du site dans les courriels : {extra["LUCTERIOS_ROOT_URL"]}')
     print(json.dumps(extra, separators=(',', ':')))
 
 

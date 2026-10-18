@@ -72,7 +72,7 @@ PUID=1026
 PGID=100
 ```
 
-- `DIACAMMA_ALLOWED_HOSTS` : le ou les noms de domaine utilisés pour accéder à Diacamma. S'il manque, le site répond « 400 Bad Request ».
+- `DIACAMMA_ALLOWED_HOSTS` : le ou les noms de domaine utilisés pour accéder à Diacamma. S'il manque, le site répond « 400 Bad Request ». Le premier nom qui n'est pas une adresse IP sert aussi d'adresse du site dans les liens des courriels (`https://<nom>`).
 - `PUID` et `PGID` : l'utilisateur et le groupe DSM propriétaires des dossiers `data` et `backups` (voir [Permissions](#permissions-puidpgid)).
 
 Les autres réglages (heure et durée de conservation des sauvegardes, mot de passe initial…) sont décrits dans `.env.example`.
@@ -182,6 +182,21 @@ Pour un simple essai sur le réseau local, sans HTTPS :
 
 Ne laissez pas cette configuration en production.
 
+### Changer de nom de domaine
+
+Les données n'ont pas à être modifiées : le nom de domaine n'est pas enregistré dans la base. Les liens envoyés par courriel (documents partagés, paiement en ligne) utilisent `https://` suivi du premier nom de `DIACAMMA_ALLOWED_HOSTS` qui n'est pas une adresse IP. Le journal du conteneur l'affiche au démarrage : `Adresse du site dans les courriels : …`.
+
+1. Chez votre registraire, faites pointer le nouveau nom vers votre box, comme l'ancien.
+2. Dans DSM, obtenez un certificat Let's Encrypt pour le nouveau nom (**Panneau de configuration** → **Sécurité** → **Certificat** → **Ajouter**).
+3. Dans Web Station, changez le nom d'hôte du portail. Pour garder l'ancien nom pendant la transition, créez plutôt un second portail. Associez ensuite le nouveau certificat au portail (**Certificat** → **Paramètres**).
+4. Dans `.env`, mettez le nouveau nom **en premier**, en gardant l'ancien pendant la transition : `DIACAMMA_ALLOWED_HOSTS=nouveau.mondomaine.fr,syndic.mondomaine.fr`. Recréez le projet : arrêtez-le, puis relancez sa construction.
+5. Prévenez les utilisateurs : leurs favoris et les liens des courriels déjà envoyés pointent vers l'ancien nom.
+6. Quand l'ancien nom ne sert plus, retirez-le de `DIACAMMA_ALLOWED_HOSTS`, recréez le projet, puis supprimez l'ancien portail et l'ancien certificat.
+
+Si l'adresse d'expédition des courriels change aussi de domaine, mettez à jour l'expéditeur dans les paramètres de Diacamma, ainsi que les enregistrements SPF et DKIM du nouveau domaine.
+
+Pour une adresse de site différente, par exemple avec un port non standard, fixez-la dans `.env` : `DIACAMMA_EXTRA_SETTINGS='{"LUCTERIOS_ROOT_URL": "https://syndic.mondomaine.fr:8443"}'`.
+
 ## Sauvegardes et restauration
 
 ### Ce qui est sauvegardé
@@ -274,7 +289,7 @@ Les conteneurs tournent sans privilèges, sous l'utilisateur `PUID:PGID` (par d�
 
 | Symptôme | Cause probable et solution |
 | --- | --- |
-| « 400 Bad Request » | Le nom de domaine utilisé n'est pas dans `DIACAMMA_ALLOWED_HOSTS`. Avec l'option B, la box a peut-être réécrit l'en-tête `Host` : ajoutez l'IP du NAS. Corrigez `.env`, puis redémarrez le projet. |
+| « 400 Bad Request » | Le nom de domaine utilisé n'est pas dans `DIACAMMA_ALLOWED_HOSTS`. Avec l'option B, la box a peut-être réécrit l'en-tête `Host` : ajoutez l'IP du NAS. Corrigez `.env`, puis recréez le projet (arrêtez-le, puis relancez sa construction) : un simple redémarrage ne relit pas `.env`. |
 | La connexion échoue sans message en HTTP | Avec `DIACAMMA_HTTPS=true`, le cookie de session n'est envoyé qu'en HTTPS. Passez par le proxy inverse ou, pour un essai, mettez `DIACAMMA_HTTPS=false`. |
 | « Build project … failed » avec « container diacamma-syndic is unhealthy » | Le conteneur `diacamma-syndic` s'arrête au démarrage. Ce message venait d'une ancienne version de `docker-compose.yml` : avec la version actuelle, le projet est créé et le conteneur apparaît « en redémarrage ». La cause est dans **son** journal (Container Manager → Conteneur → `diacamma-syndic` → Journal), sur les lignes `[diacamma] ERREUR`. Si le conteneur n'apparaît pas, lancez-le au premier plan en SSH, depuis le dossier du projet : `sudo docker compose up diacamma` (Ctrl+C pour arrêter). Le plus souvent, ce sont les droits sur `data/` ou `backups/` (voir [Permissions](#permissions-puidpgid)). |
 | Le conteneur redémarre en boucle | Lisez son journal. Le message commence par `[diacamma] ERREUR`. |
