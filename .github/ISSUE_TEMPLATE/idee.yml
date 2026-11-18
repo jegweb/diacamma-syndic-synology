@@ -1,0 +1,16 @@
+name: Idée d'amélioration
+description: Proposer une évolution du conteneur, du projet Compose ou de la documentation.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: besoin
+    attributes:
+      label: Quel besoin ?
+      description: Le problème à résoudre ou l'usage visé, plutôt que la solution technique.
+    validations:
+      required: true
+  - type: textarea
+    id: proposition
+    attributes:
+      label: Proposition
+      description: Si vous avez une idée de mise en œuvre.

@@ -3,8 +3,13 @@
 name: diacamma-syndic
 
 x-diacamma: &diacamma
-  # Image construite localement : elle n'existe sur aucun registre.
-  image: diacamma-syndic:local
+  # Image publiée sur GitHub (amd64 et arm64), téléchargée à la création du
+  # projet. Version figée : pour mettre à jour, remplacer ce fichier par celui
+  # de la nouvelle version (voir README, « Mise à jour »).
+  image: ghcr.io/jegweb/diacamma-syndic:2.7.9-1
+  # Image importée ou construite soi-même : décommenter pour ne jamais la
+  # télécharger (voir README, « Construire l'image soi-même »).
+  # pull_policy: never
   user: "${PUID:-1026}:${PGID:-100}"
   restart: unless-stopped
   read_only: true
@@ -34,11 +39,6 @@ services:
   diacamma:
     <<: *diacamma
     container_name: diacamma-syndic
-    build:
-      context: .
-    # Construire au lieu de télécharger : sinon Container Manager échoue avec
-    # « pull access denied for diacamma-syndic ».
-    pull_policy: build
     # Valeur fixe : l'assistant « portail Web » de Container Manager ne lit pas
     # les variables. 127.0.0.1 : seul DSM (Web Station ou proxy inversé) y accède.
     # Proxy de la box (option B) ou essai en HTTP sur le réseau local : "8100:8000".
@@ -49,8 +49,6 @@ services:
   sauvegarde:
     <<: *diacamma
     container_name: diacamma-syndic-sauvegarde
-    # Réutilise l'image construite pour le service diacamma.
-    pull_policy: never
     command: ["backup-daemon"]
     mem_limit: 512m
     # « started » et non « healthy » : si l'application échoue au démarrage, le

@@ -163,7 +163,7 @@ serve() {
   collect_static
   chmod 0600 "$SETTINGS"
   echo "$BUILD_ID" > "$BUILD_MARKER"
-  log "Démarrage de Diacamma Syndic ($BUILD_ID)."
+  log "Démarrage de Diacamma Syndic ($BUILD_ID, image ${DIACAMMA_IMAGE_VERSION:-inconnue})."
   # Un seul processus : le planificateur interne (envoi des courriels par
   # lots, archives, clôtures) vit dans le processus web.
   exec gunicorn diacamma_wsgi:application \
@@ -263,7 +263,7 @@ case "$command" in
   backup-daemon) backup_daemon ;;
   restore) restore "$@" ;;
   reset-admin-password) require_ready; helper reset-admin-password "$INSTANCE" ;;
-  version) echo "Build : $BUILD_ID"; grep -iE '^(diacamma|lucterios|django)' /opt/diacamma/versions.txt ;;
+  version) echo "Image : ${DIACAMMA_IMAGE_VERSION:-inconnue}"; echo "Build : $BUILD_ID"; grep -iE '^(diacamma|lucterios|django)' /opt/diacamma/versions.txt ;;
   manage) manage "$@" ;;
   admin) lucterios_admin "$@" ;;
   help|-h|--help) usage ;;

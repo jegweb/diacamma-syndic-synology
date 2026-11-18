@@ -1,0 +1,8 @@
+# Mises à jour des actions GitHub utilisées par les workflows.
+# Les versions de Diacamma se mettent à jour avec scripts/update-lock.sh.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

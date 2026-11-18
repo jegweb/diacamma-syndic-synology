@@ -1,0 +1,147 @@
+# Publication d'une version : étiquette Git vX.Y.Z-N (ou vX.Y.Z-N-rcM pour une
+# pré-version). Construit et teste l'image sur amd64 et arm64 (runners natifs),
+# la publie sur ghcr.io, puis crée la Release GitHub avec le kit d'installation.
+name: Publication
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      image: ${{ steps.check.outputs.image }}
+      version: ${{ steps.check.outputs.version }}
+      base: ${{ steps.check.outputs.base }}
+      prerelease: ${{ steps.check.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cohérence de l'étiquette, des compose, du verrou et du CHANGELOG
+        id: check
+        run: |
+          err() { echo "::error::$*"; exit 1; }
+          [[ "$GITHUB_REF_NAME" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)-([0-9]+)(-rc[0-9]+)?$ ]] \
+            || err "Étiquette « $GITHUB_REF_NAME » invalide : attendu vX.Y.Z-N ou vX.Y.Z-N-rcM."
+          upstream="${BASH_REMATCH[1]}"
+          base="$upstream-${BASH_REMATCH[2]}"
+          version="${GITHUB_REF_NAME#v}"
+          image=""
+          for f in docker-compose.yml docker-compose.postgresql.yml; do
+            ref="$(sed -nE 's/^ *image: *(ghcr\.io\/[^ ]*diacamma-syndic:[^ ]+).*/\1/p' "$f" | head -n 1)"
+            [[ "${ref##*:}" == "$base" ]] || err "$f référence « $ref » au lieu de la version $base."
+            [[ -z "$image" || "$image" == "${ref%:*}" ]] || err "Les deux compose ne référencent pas la même image."
+            image="${ref%:*}"
+          done
+          grep -qiE "^diacamma-syndic==${upstream//./\\.}(\.|$)" requirements.lock \
+            || err "requirements.lock ne contient pas diacamma-syndic $upstream."
+          grep -qF "## [$base]" CHANGELOG.md || err "CHANGELOG.md n'a pas d'entrée « ## [$base] »."
+          prerelease=false
+          [[ "$version" == "$base" ]] || prerelease=true
+          {
+            echo "image=$image"
+            echo "version=$version"
+            echo "base=$base"
+            echo "prerelease=$prerelease"
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: prepare
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ${{ needs.prepare.outputs.image }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      # Sans attestations : le Docker de Container Manager (version 24) reste
+      # compatible avec ce qui est publié.
+      - name: Construction (linux/${{ matrix.arch }})
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/${{ matrix.arch }}
+          pull: true
+          load: true
+          provenance: false
+          sbom: false
+          build-args: VERSION=${{ env.VERSION }}
+          tags: ${{ env.IMAGE }}:${{ env.VERSION }}-${{ matrix.arch }}
+      - name: Test de fumée
+        run: scripts/smoke-test.sh "$IMAGE:$VERSION-${{ matrix.arch }}"
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # On publie l'image testée elle-même, sous un tag propre à l'architecture.
+      - name: Envoi sur ghcr.io
+        run: docker push "$IMAGE:$VERSION-${{ matrix.arch }}"
+
+  publish:
+    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      packages: write
+    env:
+      IMAGE: ${{ needs.prepare.outputs.image }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+      BASE: ${{ needs.prepare.outputs.base }}
+      PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Image multi-architecture
+        run: |
+          tags=(-t "$IMAGE:$VERSION")
+          if [[ "$PRERELEASE" == false ]]; then
+            # 2.7.9-1 publie aussi 2.7.9 et latest.
+            tags+=(-t "$IMAGE:${VERSION%-*}" -t "$IMAGE:latest")
+          fi
+          docker buildx imagetools create "${tags[@]}" "$IMAGE:$VERSION-amd64" "$IMAGE:$VERSION-arm64"
+          docker buildx imagetools inspect "$IMAGE:$VERSION"
+      - name: Kit d'installation
+        run: |
+          kit="diacamma-syndic-$VERSION"
+          mkdir -p "dist/$kit"
+          for f in docker-compose.yml docker-compose.postgresql.yml; do
+            sed -E "s|^( *image: *)ghcr\.io/[^ ]*diacamma-syndic:[^ ]+|\1$IMAGE:$VERSION|" "$f" > "dist/$kit/$f"
+          done
+          cp .env.example "dist/$kit/"
+          (cd "dist/$kit" && zip -X "../$kit.zip" docker-compose.yml docker-compose.postgresql.yml .env.example)
+          unzip -l "dist/$kit.zip"
+      - name: Release GitHub
+        run: |
+          kit="diacamma-syndic-$VERSION"
+          {
+            awk -v h="## [$BASE]" 'index($0, h) == 1 { f = 1; next } f && /^## \[/ { exit } f' CHANGELOG.md
+            echo
+            echo "### Installation"
+            echo
+            echo "Téléchargez \`$kit.zip\` ci-dessous et suivez le [README](https://github.com/$GITHUB_REPOSITORY#installation)."
+            echo "Image : \`$IMAGE:$VERSION\` (amd64 et arm64)."
+          } > notes.md
+          flags=()
+          [[ "$PRERELEASE" == false ]] || flags+=(--prerelease)
+          gh release create "$GITHUB_REF_NAME" "dist/$kit.zip" \
+            --title "Diacamma Syndic $VERSION" --notes-file notes.md "${flags[@]}"

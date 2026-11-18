@@ -13,45 +13,56 @@ L'utilisateur travaille en français : réponses, commentaires, messages du cont
 ```sh
 docker build -t diacamma-syndic:local .                     # construire l'image (arch locale)
 docker build --platform linux/amd64 -t diacamma-syndic:amd64-test .   # vérifier l'autre architecture
+scripts/smoke-test.sh diacamma-syndic:local                 # test de fumée (ajouter --postgresql pour l'autre variante)
 scripts/update-lock.sh                                      # régénérer requirements.lock depuis requirements.in
 scripts/build-image.sh amd64                                # image exportée en dist/*.tar pour import dans Container Manager
 docker run --rm -v "$PWD:/mnt:ro" koalaman/shellcheck:stable docker/bin/diacamma scripts/*.sh   # lint shell
 ```
 
-Il n'y a pas de suite de tests. On vérifie en lançant le projet dans un dossier jetable (jamais dans le dépôt, pour ne pas y créer `data/` et `backups/`) :
+Il n'y a pas de suite de tests unitaires. `scripts/smoke-test.sh [--postgresql] <image>` lance le projet dans un dossier jetable, en dehors du dépôt pour ne pas y créer `data/` et `backups/`. Il remplace la ligne `image:` du compose par l'image locale indiquée, puis vérifie :
+
+- la connexion avec le mot de passe fourni, et le refus de `admin`/`admin` ;
+- `/static/settings.py` et `/static/db.sqlite3` en 404, un hôte inconnu en 400 ;
+- `backup`, puis `restore` suivi d'un redémarrage.
+
+La CI (`.github/workflows/ci.yml`) le lance sur chaque push et chaque pull request, et chaque mois sans cache. Pour un essai manuel, la connexion se teste ainsi :
 
 ```sh
-mkdir -p "$T/data" "$T/backups" && cp docker-compose.yml "$T/"
-printf 'DIACAMMA_ALLOWED_HOSTS=syndic.example.test\nDIACAMMA_ADMIN_PASSWORD=MotDePasseDeTest-2026\n' > "$T/.env"
-(cd "$T" && docker compose up -d)          # réutilise l'image diacamma-syndic:local
 curl -s -H 'Host: syndic.example.test' -X POST --data 'login=admin&password=MotDePasseDeTest-2026' \
   http://127.0.0.1:8100/CORE/authentification    # "data": "OK" si la connexion réussit, "BADAUTH" sinon
-docker exec diacamma-syndic diacamma backup  # puis restore <fichier>, version, reset-admin-password…
 ```
 
-Container Manager embarque un Docker plus ancien que celui du Mac (Docker 24, Compose 2.19 ou 2.20). Pour tester un changement du compose ou du Dockerfile dans ces conditions, utiliser un moteur isolé :
+Container Manager embarque un Docker plus ancien que celui du Mac (Docker 24, Compose 2.19 ou 2.20). Pour tester un changement du compose ou du Dockerfile dans ces conditions, utiliser un moteur isolé, avec dans `$T` un compose et un `.env` :
 
 ```sh
 docker run -d --privileged --name dind24 -e DOCKER_TLS_CERTDIR= -v "$T:/project" docker:24.0.2-dind
-docker exec -w /project dind24 docker compose pull     # ne doit pas échouer (pull_policy)
+docker exec -w /project dind24 docker compose pull     # ne doit pas échouer : l'image doit exister sur ghcr.io
 docker exec -w /project dind24 docker compose up -d
 ```
 
-Points à vérifier après une modification : `/static/settings.py` et `/static/db.sqlite3` doivent répondre 404, un hôte inconnu doit recevoir 400, et `admin`/`admin` doit être refusé.
+### Publication
+
+L'image est publiée sur `ghcr.io/jegweb/diacamma-syndic`. Versions `X.Y.Z-N` : version de Diacamma, puis révision de l'empaquetage. La procédure complète est dans `CONTRIBUTING.md`.
+
+- Le tag d'image est écrit en dur dans **les deux** compose.
+- Une étiquette Git `vX.Y.Z-N` (ou `-rcM`) lance `.github/workflows/release.yml`. Il vérifie la cohérence (étiquette, compose, `requirements.lock`, entrée `## [X.Y.Z-N]` du CHANGELOG), puis construit et teste sur des runners natifs amd64 et arm64.
+- Il pousse l'image testée sous `X.Y.Z-N-<arch>`, assemble le manifeste multi-architecture (`X.Y.Z-N`, puis `X.Y.Z` et `latest` hors pré-version) et crée la Release avec le kit `.zip` (deux compose et `.env.example`).
+- Images sans attestation (`provenance`/`sbom` désactivés), pour le Docker 24 de Container Manager.
+- `ARG VERSION` donne `DIACAMMA_IMAGE_VERSION`, affiché par `diacamma version`. Elle n'entre pas dans `diacamma-build-id` : une révision sans changement de paquets ne déclenche pas de migration.
 
 ## Architecture
 
 - `Dockerfile` : construction en deux étapes sur `python:3.13-slim-trixie`. Trixie est obligatoire : les roues aarch64 exigent glibc ≥ 2.39. Le verrou est installé avec `pip install --no-deps -r requirements.lock`. **PyQt6 est volontairement exclu** du verrou : c'est une dépendance déclarée de `lucterios`, mais elle ne sert qu'à l'interface de bureau. Exécution sous l'UID:GID 1026:100, avec `tini` comme PID 1.
 - `docker/bin/diacamma` : point d'entrée et outil d'administration (`serve`, `backup`, `backup-daemon`, `restore`, `reset-admin-password`, `version`, `manage`, `admin`). Il pilote `python -m lucterios.install.lucterios_admin … -i /data`.
 - `docker/lib/diacamma_docker.py` : fonctions Python appelées par le script (`extra-settings`, `secure-admin`, `clean-static`, `snapshot-sqlite`). `diacamma_wsgi.py` enveloppe l'application Lucterios avec WhiteNoise. `healthcheck.py` est la sonde de santé.
-- `docker-compose.yml` (SQLite) et `docker-compose.postgresql.yml` : deux services avec la même image. `diacamma` sert l'application ; `sauvegarde` lance `backup-daemon`. Durcissement : `read_only`, `cap_drop: ALL`, `no-new-privileges`, port publié sur `127.0.0.1`. Toute la configuration passe par `.env` (voir `.env.example`).
+- `docker-compose.yml` (SQLite) et `docker-compose.postgresql.yml` : deux services avec la même image, téléchargée depuis ghcr.io. `diacamma` sert l'application ; `sauvegarde` lance `backup-daemon`. Durcissement : `read_only`, `cap_drop: ALL`, `no-new-privileges`, port publié sur `127.0.0.1`. Toute la configuration passe par `.env` (voir `.env.example`).
 
 ### Contraintes propres à Synology (constatées sur un NAS Synology, noyau 4.4)
 
 - **Pas de section `logging`** dans le compose. Container Manager n'affiche que les journaux écrits par le pilote par défaut de Synology (un `log.db` par conteneur). Avec `json-file`, l'onglet Journal reste vide.
 - **Port publié en valeur fixe** (`"127.0.0.1:8100:8000"`), sans variable. L'assistant « portail Web via Web Station » de Container Manager lit le compose lui-même et ne propose aucun service si la ligne `ports` contient `${…}`. Web Station accepte en revanche un port publié sur `127.0.0.1`.
 - **Pas de `pids_limit`** : le noyau ne gère pas cette limite (avertissement « PIDs limit discarded »).
-- **`pull_policy: build` / `never`** : sans cela, Container Manager tente de télécharger `diacamma-syndic:local` et échoue.
+- **Container Manager lance `docker compose pull` avant `up`.** L'image du compose doit donc exister sur ghcr.io, dans un paquet public. Pour une image importée ou construite sur le NAS, l'utilisateur décommente `pull_policy: never` dans l'ancre `x-diacamma` ; sinon le pull échoue ou remplace l'image. Ne pas remettre de section `build:` : le kit ne contient pas le Dockerfile.
 - **`sauvegarde` dépend de `diacamma` en `service_started`, pas `service_healthy`.** Container Manager affiche tout échec de `compose up` comme « Build project failed », sans garder de conteneur dont on puisse lire le journal. Les erreurs de démarrage doivent laisser le conteneur visible, en redémarrage, avec un message `[diacamma] ERREUR` explicite.
 
 ### Séquence `serve`

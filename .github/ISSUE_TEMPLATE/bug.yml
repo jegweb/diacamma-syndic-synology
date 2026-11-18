@@ -1,0 +1,65 @@
+name: Problème d'installation ou de fonctionnement du conteneur
+description: Le conteneur ne démarre pas, une sauvegarde échoue, l'accès HTTPS ne fonctionne pas…
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci de prendre le temps de signaler ce problème.
+        **Avant d'envoyer, masquez votre nom de domaine, vos adresses IP publiques et tout mot de passe** (remplacez-les par `syndic.mondomaine.fr`, `x.x.x.x`, `***`).
+        Consultez aussi la section « Dépannage » du README.
+  - type: textarea
+    id: probleme
+    attributes:
+      label: Que se passe-t-il ?
+      description: Ce que vous avez fait, ce que vous attendiez et ce que vous avez obtenu.
+    validations:
+      required: true
+  - type: input
+    id: nas
+    attributes:
+      label: Modèle du NAS et version de DSM
+      placeholder: "ex. DS220+, DSM 7.2.2"
+    validations:
+      required: true
+  - type: dropdown
+    id: arch
+    attributes:
+      label: Processeur du NAS
+      options:
+        - Intel/AMD (x86_64)
+        - ARM 64 bits (aarch64)
+        - Je ne sais pas
+    validations:
+      required: true
+  - type: dropdown
+    id: variante
+    attributes:
+      label: Base de données
+      options:
+        - SQLite (docker-compose.yml)
+        - PostgreSQL (docker-compose.postgresql.yml)
+    validations:
+      required: true
+  - type: dropdown
+    id: acces
+    attributes:
+      label: Mode d'accès
+      options:
+        - Option A, portail Web Station
+        - Option A, proxy inversé du Panneau de configuration
+        - Option B, proxy inversé de la box
+        - Essai en HTTP sur le réseau local
+        - Autre
+  - type: textarea
+    id: version
+    attributes:
+      label: Sortie de « diacamma version »
+      description: "En SSH : `sudo docker exec diacamma-syndic diacamma version`. Si le conteneur ne démarre pas, indiquez la ligne `image:` de votre docker-compose.yml."
+      render: text
+  - type: textarea
+    id: journal
+    attributes:
+      label: Journal du conteneur
+      description: Container Manager → Conteneur → diacamma-syndic → Journal. Copiez en particulier les lignes `[diacamma] ERREUR`.
+      render: text

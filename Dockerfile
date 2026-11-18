@@ -52,5 +52,15 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15m --retries=3 \
   CMD ["python", "/opt/diacamma/lib/healthcheck.py"]
 
+# Version de l'image (X.Y.Z-N), fournie par la publication ; en dernier pour ne
+# pas invalider le cache des étapes précédentes.
+ARG VERSION=dev
+ENV DIACAMMA_IMAGE_VERSION=${VERSION}
+LABEL org.opencontainers.image.title="Diacamma Syndic pour Synology" \
+      org.opencontainers.image.description="Diacamma Syndic (gestion de copropriété) pour Synology Container Manager. Projet communautaire non officiel." \
+      org.opencontainers.image.source="https://github.com/jegweb/diacamma-syndic-synology" \
+      org.opencontainers.image.licenses="GPL-3.0-or-later" \
+      org.opencontainers.image.version="${VERSION}"
+
 ENTRYPOINT ["/usr/bin/tini", "--", "/opt/diacamma/bin/diacamma"]
 CMD ["serve"]

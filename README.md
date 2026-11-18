@@ -1,8 +1,20 @@
 # Diacamma Syndic sur NAS Synology (Container Manager)
 
-Ce projet fournit de quoi déployer [Diacamma Syndic](https://www.diacamma.org) (gestion de copropriété, logiciel libre GPL) dans **Container Manager** sur un NAS Synology : une image Docker, un projet Compose et des sauvegardes automatiques. Toutes les fonctions de l'application sont conservées : comptabilité, appels de fonds, documents, courriels, impressions PDF, archives et restauration depuis l'interface.
+> **Projet communautaire non officiel**, sans lien avec l'équipe de Diacamma. Signalez ici les problèmes du conteneur et de l'installation, et à [Diacamma](https://www.diacamma.org) ceux de l'application elle-même.
 
-Versions incluses : Diacamma Syndic 2.7.9 et Lucterios 2.7.9, sur Python 3.13 (Debian 13 « trixie »). Les dépendances sont figées dans `requirements.lock`.
+Ce projet fournit de quoi déployer [Diacamma Syndic](https://www.diacamma.org) (gestion de copropriété, logiciel libre GPL) dans **Container Manager** sur un NAS Synology : une image Docker prête à l'emploi (Intel/AMD et ARM 64 bits), un projet Compose et des sauvegardes automatiques. Toutes les fonctions de l'application sont conservées : comptabilité, appels de fonds, documents, courriels, impressions PDF, archives et restauration depuis l'interface.
+
+Versions incluses : Diacamma Syndic 2.7.9 et Lucterios 2.7.9, sur Python 3.13 (Debian 13 « trixie »). Les dépendances sont figées dans `requirements.lock`. L'image est publiée sur `ghcr.io/jegweb/diacamma-syndic` ; les nouveautés sont dans le [journal des modifications](CHANGELOG.md).
+
+## Démarrage rapide
+
+1. Téléchargez le kit `diacamma-syndic-<version>.zip` de la [dernière version](https://github.com/jegweb/diacamma-syndic-synology/releases/latest).
+2. Décompressez-le dans `docker/diacamma-syndic` sur le NAS. Créez-y les dossiers `data` et `backups`.
+3. Copiez `.env.example` en `.env` et renseignez au moins `DIACAMMA_ALLOWED_HOSTS`.
+4. Dans Container Manager, créez un projet à partir de ce dossier.
+5. Récupérez le mot de passe `admin` dans le journal du conteneur.
+
+Le détail de chaque étape est dans [Installation](#installation), et l'accès depuis Internet dans [Accès en HTTPS](#accès-en-https).
 
 ## Sommaire
 
@@ -15,12 +27,14 @@ Versions incluses : Diacamma Syndic 2.7.9 et Lucterios 2.7.9, sur Python 3.13 (D
 7. [Commandes d'administration](#commandes-dadministration)
 8. [Variante PostgreSQL](#variante-postgresql)
 9. [Permissions (PUID/PGID)](#permissions-puidpgid)
-10. [Dépannage](#dépannage)
-11. [Sécurité : récapitulatif](#sécurité--récapitulatif)
+10. [Construire l'image soi-même](#construire-limage-soi-même)
+11. [Dépannage](#dépannage)
+12. [Sécurité : récapitulatif](#sécurité--récapitulatif)
+13. [Contribuer, licence](#contribuer-licence)
 
 ## Fonctionnement
 
-Le projet lance deux conteneurs, construits à partir de la même image :
+Le projet lance deux conteneurs, à partir de la même image :
 
 | Conteneur | Rôle |
 | --- | --- |
@@ -34,21 +48,22 @@ Les données se trouvent dans deux dossiers du projet sur le NAS :
 | `data/` | L'instance Diacamma : réglages, base SQLite, documents, fichiers statiques |
 | `backups/` | Les archives `.lbk` (visibles et restaurables depuis l'interface de Diacamma) et les instantanés pris avant chaque mise à jour |
 
-Fichiers du projet :
+Fichiers du kit d'installation, seuls nécessaires sur le NAS :
 
 | Fichier | Rôle |
 | --- | --- |
 | `docker-compose.yml` | Projet Container Manager (base SQLite, recommandé) |
 | `docker-compose.postgresql.yml` | Variante avec une base PostgreSQL |
 | `.env.example` | Modèle des réglages, à copier en `.env` |
-| `Dockerfile`, `requirements.lock`, `docker/` | Construction de l'image |
-| `scripts/` | Outils pour l'ordinateur de maintenance (mise à jour des versions, export d'image) |
+
+Le dépôt contient aussi de quoi construire l'image (`Dockerfile`, `requirements.lock`, `docker/`) et des outils de maintenance (`scripts/`). Ils ne servent pas sur le NAS.
 
 ## Prérequis
 
 - DSM 7.2 ou plus récent, avec le paquet **Container Manager**.
 - Un NAS 64 bits : Intel/AMD (`x86_64`) ou ARM 64 bits (`aarch64`).
 - Environ 2 Go d'espace disque pour l'image et 300 Mo de mémoire vive. En test, l'application occupe environ 120 Mo au repos.
+- Un accès Internet depuis le NAS vers `ghcr.io`, pour télécharger l'image. Sans lui, voir [Construire l'image soi-même](#construire-limage-soi-même).
 - Pour un accès hors du réseau local : un nom de domaine pointant vers votre box (par exemple `syndic.mondomaine.fr`).
 - Un accès SSH au NAS est utile pour l'administration, mais pas obligatoire.
 
@@ -56,9 +71,10 @@ Fichiers du projet :
 
 ### 1. Copier les fichiers sur le NAS
 
-1. Dans **File Station**, créez le dossier `docker/diacamma-syndic` (le dossier partagé `docker` est créé par Container Manager).
-2. Déposez-y le contenu de ce projet : `Dockerfile`, `docker-compose.yml`, `requirements.lock`, `.env.example` et le dossier `docker/`.
-3. Créez-y deux dossiers vides : `data` et `backups`.
+1. Téléchargez le kit `diacamma-syndic-<version>.zip` depuis la page de la [dernière version](https://github.com/jegweb/diacamma-syndic-synology/releases/latest), rubrique **Assets**.
+2. Dans **File Station**, créez le dossier `docker/diacamma-syndic` (le dossier partagé `docker` est créé par Container Manager).
+3. Déposez-y le fichier `.zip`, puis faites un clic droit dessus → **Extraire** → **Extraire ici**. Vous obtenez `docker-compose.yml`, `docker-compose.postgresql.yml` et `.env.example`. Le `.zip` peut ensuite être supprimé.
+4. Créez-y deux dossiers vides : `data` et `backups`.
 
 > Créez `data` et `backups` vous-même avec File Station. S'ils sont créés automatiquement par Docker, ils appartiennent à `root` et l'application ne peut pas y écrire (voir [Permissions](#permissions-puidpgid)).
 
@@ -83,11 +99,11 @@ Les autres réglages (heure et durée de conservation des sauvegardes, mot de pa
 2. Nom du projet : `diacamma-syndic`. Chemin : `/docker/diacamma-syndic`.
 3. Source : **utiliser le fichier `docker-compose.yml` existant**.
 4. Cochez **Configurer le portail Web via Web Station**. Les valeurs à saisir sont détaillées dans [Accès en HTTPS](#accès-en-https).
-5. Validez. Container Manager construit l'image, ce qui prend 5 à 20 minutes selon le NAS, puis démarre les deux conteneurs.
+5. Validez. Container Manager télécharge l'image (quelques centaines de Mo ; la bonne architecture est choisie automatiquement), puis démarre les deux conteneurs.
 
-La première initialisation (création de la base) prend encore une à quelques minutes. Le conteneur `diacamma-syndic` passe ensuite à l'état « sain » (*healthy*).
+La première initialisation (création de la base) prend une à quelques minutes. Le conteneur `diacamma-syndic` passe ensuite à l'état « sain » (*healthy*).
 
-> **Si la construction échoue dans Container Manager**, construisez l'image sur un ordinateur équipé de Docker, avec `scripts/build-image.sh amd64` (ou `arm64` pour un NAS ARM). Importez ensuite `dist/diacamma-syndic-amd64.tar` dans **Container Manager** → **Image** → **Ajouter** → **Ajouter à partir d'un fichier**, puis créez le projet comme ci-dessus. L'image importée porte déjà le nom attendu par `docker-compose.yml`.
+> **Si le téléchargement de l'image échoue** (NAS sans accès à Internet, par exemple), voir [Construire l'image soi-même](#construire-limage-soi-même).
 
 ### 4. Récupérer le mot de passe administrateur
 
@@ -219,23 +235,32 @@ Ces sauvegardes restent sur le NAS. Ajoutez le dossier `docker/diacamma-syndic` 
   sudo docker restart diacamma-syndic
   ```
 
-- **Instantané d'avant mise à jour** (`.tar.gz`, base SQLite uniquement) : arrêtez le projet, renommez `data/syndic` en `data/syndic.casse`, extrayez l'archive dans `data/`, remettez les fichiers du projet dans la version précédente, puis reconstruisez et redémarrez.
+- **Instantané d'avant mise à jour** (`.tar.gz`, base SQLite uniquement) : arrêtez le projet, renommez `data/syndic` en `data/syndic.casse`, extrayez l'archive dans `data/`, remettez dans `docker-compose.yml` la version précédente de l'image (ligne `image:`), puis relancez la construction du projet.
 
 ## Mise à jour
 
+Les versions s'écrivent `X.Y.Z-N` : `X.Y.Z` est la version de Diacamma, `N` la révision de l'empaquetage. Une révision peut seulement apporter les correctifs de sécurité de Debian et de Python : installez-les aussi. Pour être prévenu, cliquez sur **Watch** → **Custom** → **Releases** en haut de la page GitHub du projet.
+
 1. Faites une sauvegarde : depuis l'interface, ou `sudo docker exec diacamma-syndic diacamma backup`.
-2. Remplacez les fichiers du projet sur le NAS par ceux de la nouvelle version, au minimum `requirements.lock`. **Ne touchez pas à `data/`, `backups/` ni `.env`.**
-3. Reconstruisez l'image et redémarrez le projet : dans Container Manager, arrêtez le projet puis relancez sa construction. En SSH, depuis `/volume1/docker/diacamma-syndic` :
+2. Lisez les notes de la nouvelle version, puis remplacez `docker-compose.yml` sur le NAS par celui du nouveau kit. Si vous aviez modifié la ligne `ports` (option B), refaites la modification. Une autre façon de faire : dans votre fichier, changez seulement le numéro de version à la fin de la ligne `image:`. **Ne touchez pas à `data/`, `backups/` ni `.env`.**
+3. Dans Container Manager, arrêtez le projet, puis relancez sa construction : la nouvelle image est téléchargée. En SSH, depuis `/volume1/docker/diacamma-syndic` :
 
    ```sh
-   sudo docker compose build --pull && sudo docker compose up -d
+   sudo docker compose pull && sudo docker compose up -d
    ```
 
 4. Au démarrage, le conteneur détecte la nouvelle version. Il prend un instantané (SQLite), applique les migrations de la base, puis régénère les fichiers statiques. Suivez l'opération dans le journal.
+5. Supprimez l'ancienne image : **Container Manager** → **Image** → sélectionner l'image inutilisée → **Supprimer**.
 
-Pensez aussi à reconstruire l'image de temps en temps (par exemple tous les mois), même sans nouvelle version de Diacamma : `--pull` récupère les correctifs de sécurité de l'image de base Debian/Python.
+### Passer d'une image construite sur le NAS à l'image publiée
 
-Pour préparer une nouvelle version sur l'ordinateur de maintenance, lancez `scripts/update-lock.sh`. Il résout les dernières versions 2.7.x et régénère `requirements.lock`. Testez localement avant de déployer.
+Les premières versions du projet construisaient l'image sur le NAS (`diacamma-syndic:local`). Pour passer à l'image publiée :
+
+1. Faites une sauvegarde.
+2. Remplacez `docker-compose.yml` par celui du kit, et refaites vos éventuelles modifications de la ligne `ports`.
+3. Arrêtez le projet, puis relancez sa construction.
+
+Tant que la version de Diacamma est la même, le conteneur ne voit aucune différence : pas de migration, données intactes. Vous pouvez ensuite supprimer l'image `diacamma-syndic:local` ainsi que les fichiers `Dockerfile`, `requirements.lock` et le dossier `docker/` du NAS.
 
 ## Commandes d'administration
 
@@ -285,6 +310,17 @@ Les conteneurs tournent sans privilèges, sous l'utilisateur `PUID:PGID` (par d�
   Remplacez `1026:100` par vos `PUID:PGID`. Redémarrez ensuite le projet.
 - Les fichiers créés par l'application ne sont lisibles que par leur propriétaire : `settings.py` contient la clé secrète de l'instance.
 
+## Construire l'image soi-même
+
+Utile si le NAS n'a pas accès à `ghcr.io`, ou pour tester une image modifiée. Il faut un ordinateur équipé de Docker et une copie de ce dépôt.
+
+1. Construisez l'image pour l'architecture du NAS : `scripts/build-image.sh amd64` (Intel/AMD) ou `scripts/build-image.sh arm64` (ARM). L'image porte le nom et la version écrits dans `docker-compose.yml`. Le script l'exporte dans `dist/diacamma-syndic-<version>-<arch>.tar`.
+2. Importez ce fichier : **Container Manager** → **Image** → **Ajouter** → **Ajouter à partir d'un fichier**.
+3. Dans `docker-compose.yml` sur le NAS, décommentez la ligne `# pull_policy: never` (retirez le `#`). Sans cela, Container Manager essaie de télécharger l'image et remplace la vôtre, ou échoue s'il n'a pas accès à Internet.
+4. Créez ou reconstruisez le projet comme d'habitude.
+
+Avec un accès SSH, vous pouvez aussi construire directement sur le NAS, depuis une copie du dépôt. Le nom de l'image doit être celui de la ligne `image:` du compose, par exemple : `sudo docker build -t ghcr.io/jegweb/diacamma-syndic:2.7.9-1 .`
+
 ## Dépannage
 
 | Symptôme | Cause probable et solution |
@@ -294,8 +330,9 @@ Les conteneurs tournent sans privilèges, sous l'utilisateur `PUID:PGID` (par d�
 | « Build project … failed » avec « container diacamma-syndic is unhealthy » | Le conteneur `diacamma-syndic` s'arrête au démarrage. Ce message venait d'une ancienne version de `docker-compose.yml` : avec la version actuelle, le projet est créé et le conteneur apparaît « en redémarrage ». La cause est dans **son** journal (Container Manager → Conteneur → `diacamma-syndic` → Journal), sur les lignes `[diacamma] ERREUR`. Si le conteneur n'apparaît pas, lancez-le au premier plan en SSH, depuis le dossier du projet : `sudo docker compose up diacamma` (Ctrl+C pour arrêter). Le plus souvent, ce sont les droits sur `data/` ou `backups/` (voir [Permissions](#permissions-puidpgid)). |
 | Le conteneur redémarre en boucle | Lisez son journal. Le message commence par `[diacamma] ERREUR`. |
 | « relation "CORE_parameter" does not exist » dans le journal PostgreSQL au premier démarrage | Sans conséquence : Lucterios interroge ses paramètres avant de créer les tables. |
-| « pull access denied for diacamma-syndic » | Container Manager cherche l'image sur Docker Hub. Vérifiez que `docker-compose.yml` contient bien `pull_policy: build` (service `diacamma`) et `pull_policy: never` (service `sauvegarde`). |
-| La construction de l'image échoue sur le NAS | Construisez sur un ordinateur avec `scripts/build-image.sh` et importez l'image (voir l'étape 3 de l'installation). |
+| « pull access denied » ou « denied » | Si le message cite `diacamma-syndic` sans `ghcr.io`, votre `docker-compose.yml` vient d'une ancienne version, qui construisait l'image sur le NAS : remplacez-le par celui du kit (voir [Mise à jour](#mise-à-jour)). S'il cite `ghcr.io/jegweb/diacamma-syndic`, l'image n'est pas accessible publiquement : signalez-le dans un ticket. |
+| « manifest unknown », « not found » ou délai dépassé lors du téléchargement de l'image | Vérifiez la ligne `image:` de `docker-compose.yml` : la version doit exister dans les [Releases](https://github.com/jegweb/diacamma-syndic-synology/releases). Vérifiez aussi que le NAS accède à Internet (DNS, pare-feu). À défaut, voir [Construire l'image soi-même](#construire-limage-soi-même). |
+| Une image importée est remplacée ou ignorée | Décommentez `pull_policy: never` dans `docker-compose.yml` (voir [Construire l'image soi-même](#construire-limage-soi-même)). |
 
 ## Sécurité : récapitulatif
 
@@ -313,6 +350,16 @@ Ce que fait le projet :
 Ce qui reste à votre charge :
 
 - Changer le mot de passe initial et choisir des mots de passe solides pour tous les comptes.
-- Tenir DSM et Container Manager à jour, et reconstruire l'image régulièrement.
+- Tenir DSM et Container Manager à jour, et installer les nouvelles versions de l'image, révisions comprises.
 - Copier les sauvegardes hors du NAS (Hyper Backup) et tester une restauration de temps en temps.
 - N'ouvrir l'accès depuis Internet que si c'est nécessaire, et activer le blocage automatique des adresses IP dans DSM.
+
+Pour signaler une faille, voir [SECURITY.md](SECURITY.md) ; ne publiez pas de ticket public.
+
+## Contribuer, licence
+
+Les retours d'installation, questions et corrections sont les bienvenus : voir [CONTRIBUTING.md](CONTRIBUTING.md). Les questions vont dans les [Discussions](https://github.com/jegweb/diacamma-syndic-synology/discussions), les problèmes du conteneur dans les tickets.
+
+Ce projet (Dockerfile, scripts, fichiers Compose, documentation) est distribué sous licence **GPL-3.0-or-later** : voir [LICENSE](LICENSE). Copyright (C) 2026 jegweb.
+
+Diacamma Syndic et le framework Lucterios, inclus dans l'image, sont des logiciels libres publiés par leurs auteurs sous leurs propres licences. Ce projet ne fait que les empaqueter, sans les modifier.
