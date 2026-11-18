@@ -4,7 +4,7 @@ Les versions s'écrivent `X.Y.Z-N` : `X.Y.Z` est la version de Diacamma Syndic i
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/).
 
-## [2.7.10-1]
+## [2.7.10-1] - 2026-11-19
 
 **Faites une sauvegarde avant la mise à jour.** Au premier démarrage, le conteneur détecte la nouvelle version. Il prend alors un instantané de la base SQLite dans `backups/avant-mise-a-jour/`. Cette version ne modifie pas la structure de la base : elle n'apporte aucune nouvelle migration. Suivez l'opération dans le journal.
 
