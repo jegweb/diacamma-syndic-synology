@@ -175,7 +175,7 @@ Ici, la box transmet directement au conteneur, sans passer par DSM.
 2. Dans `.env` (voir le bloc « Option B » de `.env.example`) :
    - gardez `DIACAMMA_HTTPS=true` ;
    - si la box réécrit l'en-tête `Host`, ajoutez l'IP du NAS à `DIACAMMA_ALLOWED_HOSTS`, par exemple `syndic.mondomaine.fr,192.168.1.10`.
-3. Recréez le projet : relancez sa construction dans Container Manager. Un simple redémarrage ne relit ni `.env` ni le compose.
+3. Recréez le projet dans Container Manager : **Arrêter**, **Nettoyer**, puis **Créer**. Un simple redémarrage ne relit ni `.env` ni le compose.
 4. Dans la box, créez une règle de proxy inversé :
    - source `https://syndic.mondomaine.fr`, avec un certificat valide (Let's Encrypt par exemple) ;
    - destination `http://<IP-du-NAS>:8100`.
@@ -205,7 +205,7 @@ Les données n'ont pas à être modifiées : le nom de domaine n'est pas enregis
 1. Chez votre registraire, faites pointer le nouveau nom vers votre box, comme l'ancien.
 2. Dans DSM, obtenez un certificat Let's Encrypt pour le nouveau nom (**Panneau de configuration** → **Sécurité** → **Certificat** → **Ajouter**).
 3. Dans Web Station, changez le nom d'hôte du portail. Pour garder l'ancien nom pendant la transition, créez plutôt un second portail. Associez ensuite le nouveau certificat au portail (**Certificat** → **Paramètres**).
-4. Dans `.env`, mettez le nouveau nom **en premier**, en gardant l'ancien pendant la transition : `DIACAMMA_ALLOWED_HOSTS=nouveau.mondomaine.fr,syndic.mondomaine.fr`. Recréez le projet : arrêtez-le, puis relancez sa construction.
+4. Dans `.env`, mettez le nouveau nom **en premier**, en gardant l'ancien pendant la transition : `DIACAMMA_ALLOWED_HOSTS=nouveau.mondomaine.fr,syndic.mondomaine.fr`. Recréez le projet : **Arrêter**, **Nettoyer**, puis **Créer**.
 5. Prévenez les utilisateurs : leurs favoris et les liens des courriels déjà envoyés pointent vers l'ancien nom.
 6. Quand l'ancien nom ne sert plus, retirez-le de `DIACAMMA_ALLOWED_HOSTS`, recréez le projet, puis supprimez l'ancien portail et l'ancien certificat.
 
@@ -235,7 +235,7 @@ Ces sauvegardes restent sur le NAS. Ajoutez le dossier `docker/diacamma-syndic` 
   sudo docker restart diacamma-syndic
   ```
 
-- **Instantané d'avant mise à jour** (`.tar.gz`, base SQLite uniquement) : arrêtez le projet, renommez `data/syndic` en `data/syndic.casse`, extrayez l'archive dans `data/`, remettez dans `docker-compose.yml` la version précédente de l'image (ligne `image:`), puis relancez la construction du projet.
+- **Instantané d'avant mise à jour** (`.tar.gz`, base SQLite uniquement) : arrêtez le projet, renommez `data/syndic` en `data/syndic.casse`, extrayez l'archive dans `data/`, remettez dans `docker-compose.yml` la version précédente de l'image (ligne `image:`), puis **Nettoyer** et **Créer** le projet.
 
 ## Mise à jour
 
@@ -243,7 +243,12 @@ Les versions s'écrivent `X.Y.Z-N` : `X.Y.Z` est la version de Diacamma, `N` la 
 
 1. Faites une sauvegarde : depuis l'interface, ou `sudo docker exec diacamma-syndic diacamma backup`.
 2. Lisez les notes de la nouvelle version, puis remplacez `docker-compose.yml` sur le NAS par celui du nouveau kit. Si vous aviez modifié la ligne `ports` (option B), refaites la modification. Une autre façon de faire : dans votre fichier, changez seulement le numéro de version à la fin de la ligne `image:`. **Ne touchez pas à `data/`, `backups/` ni `.env`.**
-3. Dans Container Manager, arrêtez le projet, puis relancez sa construction : la nouvelle image est téléchargée. En SSH, depuis `/volume1/docker/diacamma-syndic` :
+3. Dans **Container Manager** → **Projet**, sélectionnez le projet, puis choisissez successivement :
+   - **Arrêter** ;
+   - **Nettoyer** : les conteneurs sont supprimés, mais les données de `data/` et `backups/` ne sont pas touchées ;
+   - **Créer** : Container Manager relit le compose et `.env`, télécharge la nouvelle image et recrée les conteneurs.
+
+   « Démarrer » ne suffit pas : il relance les conteneurs existants avec l'ancienne configuration. En SSH, depuis `/volume1/docker/diacamma-syndic` :
 
    ```sh
    sudo docker compose pull && sudo docker compose up -d
@@ -258,7 +263,7 @@ Les premières versions du projet construisaient l'image sur le NAS (`diacamma-s
 
 1. Faites une sauvegarde.
 2. Remplacez `docker-compose.yml` par celui du kit, et refaites vos éventuelles modifications de la ligne `ports`.
-3. Arrêtez le projet, puis relancez sa construction.
+3. Dans Container Manager : **Arrêter**, **Nettoyer**, puis **Créer**. Gardez l'image `diacamma-syndic:local` jusqu'à ce que tout fonctionne : pour revenir en arrière, il suffit de remettre l'ancien `docker-compose.yml` et de recommencer cette étape.
 
 Tant que la version de Diacamma est la même, le conteneur ne voit aucune différence : pas de migration, données intactes. Vous pouvez ensuite supprimer l'image `diacamma-syndic:local` ainsi que les fichiers `Dockerfile`, `requirements.lock` et le dossier `docker/` du NAS.
 
@@ -317,7 +322,7 @@ Utile si le NAS n'a pas accès à `ghcr.io`, ou pour tester une image modifiée.
 1. Construisez l'image pour l'architecture du NAS : `scripts/build-image.sh amd64` (Intel/AMD) ou `scripts/build-image.sh arm64` (ARM). L'image porte le nom et la version écrits dans `docker-compose.yml`. Le script l'exporte dans `dist/diacamma-syndic-<version>-<arch>.tar`.
 2. Importez ce fichier : **Container Manager** → **Image** → **Ajouter** → **Ajouter à partir d'un fichier**.
 3. Dans `docker-compose.yml` sur le NAS, décommentez la ligne `# pull_policy: never` (retirez le `#`). Sans cela, Container Manager essaie de télécharger l'image et remplace la vôtre, ou échoue s'il n'a pas accès à Internet.
-4. Créez ou reconstruisez le projet comme d'habitude.
+4. Créez le projet comme d'habitude. S'il existe déjà : **Arrêter**, **Nettoyer**, puis **Créer**.
 
 Avec un accès SSH, vous pouvez aussi construire directement sur le NAS, depuis une copie du dépôt. Le nom de l'image doit être celui de la ligne `image:` du compose, par exemple : `sudo docker build -t ghcr.io/jegweb/diacamma-syndic:2.7.9-1 .`
 
@@ -325,7 +330,7 @@ Avec un accès SSH, vous pouvez aussi construire directement sur le NAS, depuis 
 
 | Symptôme | Cause probable et solution |
 | --- | --- |
-| « 400 Bad Request » | Le nom de domaine utilisé n'est pas dans `DIACAMMA_ALLOWED_HOSTS`. Avec l'option B, la box a peut-être réécrit l'en-tête `Host` : ajoutez l'IP du NAS. Corrigez `.env`, puis recréez le projet (arrêtez-le, puis relancez sa construction) : un simple redémarrage ne relit pas `.env`. |
+| « 400 Bad Request » | Le nom de domaine utilisé n'est pas dans `DIACAMMA_ALLOWED_HOSTS`. Avec l'option B, la box a peut-être réécrit l'en-tête `Host` : ajoutez l'IP du NAS. Corrigez `.env`, puis recréez le projet (**Arrêter**, **Nettoyer**, puis **Créer**) : un simple redémarrage ne relit pas `.env`. |
 | La connexion échoue sans message en HTTP | Avec `DIACAMMA_HTTPS=true`, le cookie de session n'est envoyé qu'en HTTPS. Passez par le proxy inverse ou, pour un essai, mettez `DIACAMMA_HTTPS=false`. |
 | « Build project … failed » avec « container diacamma-syndic is unhealthy » | Le conteneur `diacamma-syndic` s'arrête au démarrage. Ce message venait d'une ancienne version de `docker-compose.yml` : avec la version actuelle, le projet est créé et le conteneur apparaît « en redémarrage ». La cause est dans **son** journal (Container Manager → Conteneur → `diacamma-syndic` → Journal), sur les lignes `[diacamma] ERREUR`. Si le conteneur n'apparaît pas, lancez-le au premier plan en SSH, depuis le dossier du projet : `sudo docker compose up diacamma` (Ctrl+C pour arrêter). Le plus souvent, ce sont les droits sur `data/` ou `backups/` (voir [Permissions](#permissions-puidpgid)). |
 | Le conteneur redémarre en boucle | Lisez son journal. Le message commence par `[diacamma] ERREUR`. |
