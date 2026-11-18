@@ -70,7 +70,7 @@ jobs:
       # Sans attestations : le Docker de Container Manager (version 24) reste
       # compatible avec ce qui est publié.
       - name: Construction (linux/${{ matrix.arch }})
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/${{ matrix.arch }}
