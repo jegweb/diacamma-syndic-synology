@@ -4,7 +4,7 @@ Les versions s'écrivent `X.Y.Z-N` : `X.Y.Z` est la version de Diacamma Syndic i
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/).
 
-## [2.7.9-1]
+## [2.7.9-1] - 2026-11-19
 
 Première version publique.
 

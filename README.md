@@ -109,7 +109,7 @@ La première initialisation (création de la base) prend une à quelques minutes
 
 Au premier démarrage, un mot de passe aléatoire est créé pour le compte `admin`. Vous le trouverez à deux endroits :
 
-- dans **Container Manager** → **Conteneur** → `diacamma-syndic` → **Journal** ;
+- dans le journal du conteneur : **Container Manager** → **Conteneur** → double-clic sur `diacamma-syndic` (ou bouton **Détails**) → onglet **Journal** ;
 - dans le fichier `data/MOT_DE_PASSE_ADMIN_INITIAL.txt`.
 
 Connectez-vous, **changez ce mot de passe** dans Diacamma, puis supprimez le fichier.
@@ -328,6 +328,14 @@ Avec un accès SSH, vous pouvez aussi construire directement sur le NAS, depuis 
 
 ## Dépannage
 
+Commencez par le journal du conteneur : **Container Manager** → **Conteneur** → double-clic sur `diacamma-syndic` (ou bouton **Détails**) → onglet **Journal**. Les messages propres au conteneur commencent par `[diacamma]`. En SSH, pour n'afficher qu'eux :
+
+```sh
+sudo docker logs diacamma-syndic 2>&1 | grep '\[diacamma\]'
+```
+
+Un démarrage normal se termine par `[diacamma] Démarrage de Diacamma Syndic (…, image X.Y.Z-N).`, suivi des lignes de gunicorn.
+
 | Symptôme | Cause probable et solution |
 | --- | --- |
 | « 400 Bad Request » | Le nom de domaine utilisé n'est pas dans `DIACAMMA_ALLOWED_HOSTS`. Avec l'option B, la box a peut-être réécrit l'en-tête `Host` : ajoutez l'IP du NAS. Corrigez `.env`, puis recréez le projet (**Arrêter**, **Nettoyer**, puis **Créer**) : un simple redémarrage ne relit pas `.env`. |
@@ -335,6 +343,7 @@ Avec un accès SSH, vous pouvez aussi construire directement sur le NAS, depuis 
 | « Build project … failed » avec « container diacamma-syndic is unhealthy » | Le conteneur `diacamma-syndic` s'arrête au démarrage. Ce message venait d'une ancienne version de `docker-compose.yml` : avec la version actuelle, le projet est créé et le conteneur apparaît « en redémarrage ». La cause est dans **son** journal (Container Manager → Conteneur → `diacamma-syndic` → Journal), sur les lignes `[diacamma] ERREUR`. Si le conteneur n'apparaît pas, lancez-le au premier plan en SSH, depuis le dossier du projet : `sudo docker compose up diacamma` (Ctrl+C pour arrêter). Le plus souvent, ce sont les droits sur `data/` ou `backups/` (voir [Permissions](#permissions-puidpgid)). |
 | Le conteneur redémarre en boucle | Lisez son journal. Le message commence par `[diacamma] ERREUR`. |
 | « relation "CORE_parameter" does not exist » dans le journal PostgreSQL au premier démarrage | Sans conséquence : Lucterios interroge ses paramètres avant de créer les tables. |
+| « SyntaxWarning: invalid escape sequence » ou « Your models in app(s): 'condominium', 'payoff' have changes that are not yet reflected in a migration » à chaque démarrage | Sans conséquence : ces messages viennent du code de Diacamma et Lucterios eux-mêmes. Ne lancez pas `makemigrations`. |
 | « pull access denied » ou « denied » | Si le message cite `diacamma-syndic` sans `ghcr.io`, votre `docker-compose.yml` vient d'une ancienne version, qui construisait l'image sur le NAS : remplacez-le par celui du kit (voir [Mise à jour](#mise-à-jour)). S'il cite `ghcr.io/jegweb/diacamma-syndic`, l'image n'est pas accessible publiquement : signalez-le dans un ticket. |
 | « Error » lors du téléchargement de l'image (« Pulling ») | Container Manager n'affiche pas la cause. Pour la voir, en SSH depuis le dossier du projet : `sudo docker compose pull`. |
 | « manifest unknown » | La version écrite à la fin de la ligne `image:` de `docker-compose.yml` n'existe pas. Le plus souvent, le fichier a été copié depuis la page du dépôt au lieu du kit de la Release ; or il peut viser une version en préparation. Prenez le fichier du kit, ou corrigez la version d'après les [Releases](https://github.com/jegweb/diacamma-syndic-synology/releases), puis **Nettoyer** et **Créer**. |
