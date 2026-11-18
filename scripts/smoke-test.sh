@@ -3,30 +3,40 @@
 # la connexion, les protections (admin/admin, /static/, hôte inconnu) et les
 # commandes de sauvegarde et de restauration. Code de retour non nul en cas d'échec.
 #
-# Usage : scripts/smoke-test.sh [--postgresql] [image]
-#   image : image à tester, déjà présente localement (défaut : celle du compose).
-#   Exemple : docker build -t diacamma-syndic:local . && scripts/smoke-test.sh diacamma-syndic:local
+# Usage : scripts/smoke-test.sh [--postgresql] [--depuis <ancienne image>] [image]
+#   image : image à tester (défaut : celle du compose).
+#   --depuis : installe d'abord l'ancienne image, puis passe à la nouvelle, comme
+#     un utilisateur qui met à jour. Vérifie la détection de la mise à jour, les
+#     migrations et l'instantané SQLite (si les versions des paquets diffèrent).
+#   Exemples :
+#     docker build -t diacamma-syndic:local . && scripts/smoke-test.sh diacamma-syndic:local
+#     scripts/smoke-test.sh --depuis ghcr.io/jegweb/diacamma-syndic:latest diacamma-syndic:local
 # Variable : SMOKE_TIMEOUT, délai maximal d'attente de l'état « healthy » (600 s).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+log() { printf '[test] %s\n' "$*"; }
+fail() { printf '[test] ÉCHEC : %s\n' "$*" >&2; exit 1; }
+
 COMPOSE_SRC=docker-compose.yml
-if [[ "${1:-}" == --postgresql ]]; then
-  COMPOSE_SRC=docker-compose.postgresql.yml
-  shift
-fi
-IMAGE="${1:-}"
+FROM_IMAGE=""
+while (( $# > 0 )); do
+  case "$1" in
+    --postgresql) COMPOSE_SRC=docker-compose.postgresql.yml; shift ;;
+    --depuis) FROM_IMAGE="${2:-}"; [[ -n "$FROM_IMAGE" ]] || fail "--depuis demande une image."; shift 2 ;;
+    -*) fail "option inconnue : $1" ;;
+    *) break ;;
+  esac
+done
+IMAGE="${1:-$(sed -nE 's/^ *image: *([^ ]*diacamma-syndic[^ ]*).*/\1/p' "$COMPOSE_SRC" | head -n 1)}"
 TIMEOUT="${SMOKE_TIMEOUT:-600}"
 HOST=syndic.example.test
 PASSWORD=MotDePasseDeTest-2026
 URL=http://127.0.0.1:8100
 APP=diacamma-syndic
 
-log() { printf '[test] %s\n' "$*"; }
-fail() { printf '[test] ÉCHEC : %s\n' "$*" >&2; exit 1; }
-
 for name in "$APP" "$APP-sauvegarde" "$APP-db"; do
-  if docker ps -a --format '{{.Names}}' | grep -qx "$name"; then
+  if docker ps -a --format '{{.Names}}' | grep -x "$name" >/dev/null; then
     fail "un conteneur « $name » existe déjà sur cette machine : supprimez-le avant le test."
   fi
 done
@@ -47,10 +57,15 @@ trap cleanup EXIT
 
 mkdir -p "$T/data" "$T/backups"
 cp "$COMPOSE_SRC" "$T/docker-compose.yml"
-if [[ -n "$IMAGE" ]]; then
-  sed -i.orig -E "s|^( *image: *)ghcr\.io/[^ ]*diacamma-syndic:[^ ]+|\1$IMAGE|" "$T/docker-compose.yml"
+# Remplace l'image des services Diacamma (pas celle de PostgreSQL).
+set_image() {
+  sed -i.orig -E "s|^( *image: *)[^ ]*diacamma-syndic[^ ]*|\1$1|" "$T/docker-compose.yml"
   rm -f "$T/docker-compose.yml.orig"
-fi
+}
+build_id() {
+  docker image inspect "$1" >/dev/null 2>&1 || docker pull -q "$1" >/dev/null
+  docker run --rm --entrypoint cat "$1" /opt/diacamma/diacamma-build-id
+}
 {
   echo "DIACAMMA_ALLOWED_HOSTS=$HOST"
   echo "DIACAMMA_ADMIN_PASSWORD=$PASSWORD"
@@ -86,25 +101,54 @@ http_code() { curl -s -o /dev/null -w '%{http_code}' -H "Host: ${2:-$HOST}" "$UR
 login() {
   curl -s -H "Host: $HOST" -X POST --data "login=$1&password=$2" "$URL/CORE/authentification"
 }
+# Les grep lisent toute leur entrée (pas de -q) : avec pipefail, un grep -q
+# qui s'arrête tôt ferait échouer la commande en amont (SIGPIPE).
 # Réessaie pendant 2 minutes : juste après un redémarrage, l'état « healthy »
 # peut encore être celui d'avant et gunicorn pas encore prêt.
 check_login() {
   local tries=0
-  until login admin "$PASSWORD" | grep -qE '"data" *: *"OK"'; do
+  until login admin "$PASSWORD" | grep -E '"data" *: *"OK"' >/dev/null; do
     (( ++tries < 40 )) || fail "connexion admin avec le mot de passe fourni refusée."
     sleep 3
   done
   log "OK : connexion admin."
 }
 
-log "Dossier de test : $T ($COMPOSE_SRC, image ${IMAGE:-du compose})"
-compose up -d --quiet-pull
-wait_healthy
+log "Dossier de test : $T ($COMPOSE_SRC, image $IMAGE${FROM_IMAGE:+, depuis $FROM_IMAGE})"
+if [[ -n "$FROM_IMAGE" ]]; then
+  set_image "$FROM_IMAGE"
+  compose up -d --quiet-pull
+  wait_healthy
+  check_login
+  log "OK : installation de l'ancienne version ; passage à $IMAGE."
+  old_id="$(build_id "$FROM_IMAGE")"
+  new_id="$(build_id "$IMAGE")"
+  set_image "$IMAGE"
+  compose up -d --quiet-pull
+  wait_healthy
+  if [[ "$old_id" != "$new_id" ]]; then
+    docker logs "$APP" 2>&1 | grep -F "Mise à jour détectée : $old_id -> $new_id" >/dev/null \
+      || fail "la mise à jour $old_id -> $new_id n'a pas été détectée."
+    if [[ "$COMPOSE_SRC" == docker-compose.yml ]]; then
+      find "$T/backups/avant-mise-a-jour" -name 'syndic_*.tar.gz' 2>/dev/null | grep . >/dev/null \
+        || fail "aucun instantané dans backups/avant-mise-a-jour/."
+      log "OK : instantané SQLite pris avant la mise à jour."
+    fi
+    log "OK : mise à jour détectée et migrations appliquées ($old_id -> $new_id)."
+  else
+    ! docker logs "$APP" 2>&1 | grep -F "Mise à jour détectée" >/dev/null || fail "mise à jour détectée alors que les paquets sont identiques."
+    log "OK : paquets identiques, aucune migration (révision de l'image)."
+  fi
+else
+  set_image "$IMAGE"
+  compose up -d --quiet-pull
+  wait_healthy
+fi
 [[ "$(docker inspect -f '{{.State.Running}}' "$APP-sauvegarde")" == true ]] || fail "le service de sauvegarde ne tourne pas."
 log "OK : service de sauvegarde lancé."
 
 check_login
-login admin admin | grep -q BADAUTH || fail "admin/admin n'est pas refusé."
+login admin admin | grep BADAUTH >/dev/null || fail "admin/admin n'est pas refusé."
 log "OK : admin/admin refusé."
 for path in /static/settings.py /static/db.sqlite3; do
   code="$(http_code "$path")"

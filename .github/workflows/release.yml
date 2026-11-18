@@ -82,6 +82,13 @@ jobs:
           tags: ${{ env.IMAGE }}:${{ env.VERSION }}-${{ matrix.arch }}
       - name: Test de fumée
         run: scripts/smoke-test.sh "$IMAGE:$VERSION-${{ matrix.arch }}"
+      - name: Test de mise à jour depuis la dernière version publiée
+        run: |
+          if docker buildx imagetools inspect "$IMAGE:latest" >/dev/null 2>&1; then
+            scripts/smoke-test.sh --depuis "$IMAGE:latest" "$IMAGE:$VERSION-${{ matrix.arch }}"
+          else
+            echo "Aucune version publiée : test de mise à jour ignoré."
+          fi
       - uses: docker/login-action@v4
         with:
           registry: ghcr.io

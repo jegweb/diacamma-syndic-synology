@@ -8,8 +8,14 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1
 COPY requirements.lock /tmp/requirements.lock
 # --no-deps : le verrou est complet et exclut volontairement PyQt6.
+# pip check : arrête la construction si le verrou viole une exigence déclarée
+# par un paquet (seule l'absence de PyQt6 est attendue).
 RUN python -m venv /opt/venv \
  && /opt/venv/bin/pip install --no-deps -r /tmp/requirements.lock \
+ && (/opt/venv/bin/pip check || true) > /tmp/pip-check.txt \
+ && if grep -viE 'requires pyqt6,|^No broken requirements' /tmp/pip-check.txt | grep -q .; then \
+      echo "Verrou incohérent :" >&2; cat /tmp/pip-check.txt >&2; exit 1; \
+    fi \
  && /opt/venv/bin/python -m compileall -q -j 0 /opt/venv \
  && /opt/venv/bin/pip freeze > /opt/venv/versions.txt \
  && /opt/venv/bin/python -c "import importlib.metadata as m; print('-'.join(m.version(p) for p in ('diacamma-syndic', 'diacamma-financial', 'lucterios', 'lucterios-contacts', 'lucterios-documents')))" > /opt/venv/diacamma-build-id

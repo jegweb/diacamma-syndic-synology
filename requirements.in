@@ -11,6 +11,16 @@ diacamma-financial~=2.7.0
 diacamma-syndic~=2.7.0
 
 # Serveur WSGI, fichiers statiques et pilote PostgreSQL (variante optionnelle).
-gunicorn
+# gunicorn 27.0 date du 10/11/2026 : voir les plafonds ci-dessous.
+gunicorn<27
 whitenoise
 psycopg2-binary
+
+# Plafonds prudents, à revoir à chaque nouvelle version de Diacamma (voir
+# CONTRIBUTING.md). Ce sont des dépendances indirectes que l'amont ne limite
+# pas et dont une version majeure est sortie APRÈS Diacamma 2.7.10
+# (30/10/2026) : l'amont n'a donc pas pu la tester. Les versions mineures et
+# correctives restent permises.
+python-dateutil<4   # 4.0 du 01/11/2026, tiré par pandas
+pypdf<7             # 7.0 du 06/11/2026, tiré par factur-x (factures électroniques)
+stripe<17           # 17.0 du 11/11/2026, paiement en ligne (diacamma-financial)

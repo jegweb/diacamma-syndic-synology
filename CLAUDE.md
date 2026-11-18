@@ -14,6 +14,7 @@ L'utilisateur travaille en français : réponses, commentaires, messages du cont
 docker build -t diacamma-syndic:local .                     # construire l'image (arch locale)
 docker build --platform linux/amd64 -t diacamma-syndic:amd64-test .   # vérifier l'autre architecture
 scripts/smoke-test.sh diacamma-syndic:local                 # test de fumée (ajouter --postgresql pour l'autre variante)
+scripts/smoke-test.sh --depuis ghcr.io/jegweb/diacamma-syndic:latest diacamma-syndic:local   # test de mise à jour
 scripts/update-lock.sh                                      # régénérer requirements.lock depuis requirements.in
 scripts/build-image.sh amd64                                # image exportée en dist/*.tar pour import dans Container Manager
 docker run --rm -v "$PWD:/mnt:ro" koalaman/shellcheck:stable docker/bin/diacamma scripts/*.sh   # lint shell
@@ -45,6 +46,8 @@ docker exec -w /project dind24 docker compose up -d
 L'image est publiée sur `ghcr.io/jegweb/diacamma-syndic`. Versions `X.Y.Z-N` : version de Diacamma, puis révision de l'empaquetage. La procédure complète est dans `CONTRIBUTING.md`.
 
 - Le tag d'image est écrit en dur dans **les deux** compose.
+- **Plafonds prudents** (`requirements.in`) : une dépendance indirecte que l'amont ne limite pas, et dont une version majeure est sortie après la version amont de Diacamma, est plafonnée sous cette majeure. Les règles complètes sont dans CONTRIBUTING, étape 1. Le Dockerfile lance `pip check` : seule l'absence de PyQt6 est tolérée.
+- Test de mise à jour : `smoke-test.sh --depuis <image publiée>`. La CI (variante `mise-a-jour`) et la publication le lancent depuis `:latest`.
 - Une étiquette Git `vX.Y.Z-N` (ou `-rcM`) lance `.github/workflows/release.yml`. Il vérifie la cohérence (étiquette, compose, `requirements.lock`, entrée `## [X.Y.Z-N]` du CHANGELOG), puis construit et teste sur des runners natifs amd64 et arm64.
 - Il pousse l'image testée sous `X.Y.Z-N-<arch>`, assemble le manifeste multi-architecture (`X.Y.Z-N`, puis `X.Y.Z` et `latest` hors pré-version) et crée la Release avec le kit `.zip` (deux compose et `.env.example`).
 - Images sans attestation (`provenance`/`sbom` désactivés), pour le Docker 24 de Container Manager.

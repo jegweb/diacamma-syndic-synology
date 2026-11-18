@@ -24,6 +24,7 @@ Il faut Docker sur un ordinateur (amd64 ou Mac Apple Silicon).
 docker build -t diacamma-syndic:local .
 scripts/smoke-test.sh diacamma-syndic:local                # base SQLite
 scripts/smoke-test.sh --postgresql diacamma-syndic:local   # base PostgreSQL
+scripts/smoke-test.sh --depuis ghcr.io/jegweb/diacamma-syndic:latest diacamma-syndic:local   # mise à jour
 docker run --rm -v "$PWD:/mnt:ro" koalaman/shellcheck:stable docker/bin/diacamma scripts/*.sh
 ```
 
@@ -33,7 +34,9 @@ docker run --rm -v "$PWD:/mnt:ro" koalaman/shellcheck:stable docker/bin/diacamma
 - `/static/settings.py` et `/static/db.sqlite3` en 404, un hôte inconnu en 400 ;
 - la sauvegarde puis la restauration.
 
-L'intégration continue lance les mêmes contrôles sur chaque pull request.
+Avec `--depuis`, il installe d'abord l'ancienne image, puis passe à la nouvelle, comme un utilisateur qui met à jour. Si les versions des paquets diffèrent, il vérifie la détection de la mise à jour, l'instantané SQLite et les migrations. Sinon, il vérifie qu'aucune migration n'est lancée.
+
+L'intégration continue lance ces contrôles sur chaque pull request, mise à jour comprise. La construction de l'image vérifie aussi la cohérence du verrou avec `pip check`.
 
 **Docker de Container Manager.** Le NAS embarque un Docker plus ancien (24, avec Compose 2.19 ou 2.20). Pour une modification du compose ou du Dockerfile, testez aussi avec un moteur isolé, depuis un dossier qui contient le compose et un `.env` :
 
@@ -50,6 +53,7 @@ Si vous le pouvez, testez enfin sur un vrai NAS : Container Manager a ses propre
 Les versions s'écrivent `X.Y.Z-N` (voir [CHANGELOG.md](CHANGELOG.md)).
 
 1. **Nouvelle version de Diacamma** : lancez `scripts/update-lock.sh`, vérifiez les versions affichées et mettez à jour la ligne « Versions incluses » du README. La révision repart à `-1`.
+   Comparez ensuite le nouveau verrou à l'ancien (`git diff requirements.lock`). Repérez chaque **dépendance indirecte qui change de version majeure** sans que l'amont l'exige : regardez sur PyPI ses `Requires-Dist` et la date de sortie de la nouvelle majeure. Si cette majeure est sortie **après** la version amont de Diacamma, l'amont n'a pas pu la tester. Plafonnez-la alors dans la section « Plafonds prudents » de `requirements.in`, en indiquant la date et qui la tire, puis relancez `update-lock.sh`. Retirez les plafonds de la version précédente que l'amont a depuis rattrapés.
    **Révision** (correctif du conteneur, ou correctifs de sécurité Debian et Python) : gardez `requirements.lock` et incrémentez `N`.
 2. Remplacez le tag de l'image dans `docker-compose.yml` **et** `docker-compose.postgresql.yml`.
 3. Ajoutez l'entrée `## [X.Y.Z-N]` au CHANGELOG.

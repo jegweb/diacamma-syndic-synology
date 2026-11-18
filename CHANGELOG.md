@@ -4,6 +4,21 @@ Les versions s'écrivent `X.Y.Z-N` : `X.Y.Z` est la version de Diacamma Syndic i
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/).
 
+## [2.7.10-1]
+
+**Faites une sauvegarde avant la mise à jour.** Au premier démarrage, le conteneur détecte la nouvelle version. Il prend alors un instantané de la base SQLite dans `backups/avant-mise-a-jour/`. Cette version ne modifie pas la structure de la base : elle n'apporte aucune nouvelle migration. Suivez l'opération dans le journal.
+
+### Modifié
+
+- Diacamma Syndic 2.7.10 et Lucterios 2.7.10, versions publiées par l'équipe Diacamma le 30 octobre 2026. Les nouveautés fonctionnelles sont présentées sur [diacamma.org](https://www.diacamma.org).
+- Dépendances mises à jour. Les nouvelles versions de Lucterios et Diacamma exigent notamment Pillow 13, ReportLab 5, pandas 3 et factur-x 7. Django passe en 5.2.19.
+
+### Ajouté
+
+- Plafonds prudents sur les dépendances indirectes dont une version majeure est sortie après Diacamma 2.7.10, et que l'amont n'a donc pas pu tester : python-dateutil < 4, pypdf < 7, stripe < 17 (paiement en ligne) et gunicorn < 27.
+- Contrôle de cohérence des dépendances (`pip check`) pendant la construction de l'image.
+- Test de mise à jour depuis la dernière version publiée, lancé par l'intégration continue et à chaque publication : détection de la mise à jour, instantané et migrations.
+
 ## [2.7.9-1] - 2026-11-19
 
 Première version publique.

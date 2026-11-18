@@ -4,7 +4,7 @@
 
 Ce projet fournit de quoi déployer [Diacamma Syndic](https://www.diacamma.org) (gestion de copropriété, logiciel libre GPL) dans **Container Manager** sur un NAS Synology : une image Docker prête à l'emploi (Intel/AMD et ARM 64 bits), un projet Compose et des sauvegardes automatiques. Toutes les fonctions de l'application sont conservées : comptabilité, appels de fonds, documents, courriels, impressions PDF, archives et restauration depuis l'interface.
 
-Versions incluses : Diacamma Syndic 2.7.9 et Lucterios 2.7.9, sur Python 3.13 (Debian 13 « trixie »). Les dépendances sont figées dans `requirements.lock`. L'image est publiée sur `ghcr.io/jegweb/diacamma-syndic` ; les nouveautés sont dans le [journal des modifications](CHANGELOG.md).
+Versions incluses : Diacamma Syndic 2.7.10 et Lucterios 2.7.10, sur Python 3.13 (Debian 13 « trixie »). Les dépendances sont figées dans `requirements.lock`. L'image est publiée sur `ghcr.io/jegweb/diacamma-syndic` ; les nouveautés sont dans le [journal des modifications](CHANGELOG.md).
 
 ## Démarrage rapide
 
@@ -324,7 +324,7 @@ Utile si le NAS n'a pas accès à `ghcr.io`, ou pour tester une image modifiée.
 3. Dans `docker-compose.yml` sur le NAS, décommentez la ligne `# pull_policy: never` (retirez le `#`). Sans cela, Container Manager essaie de télécharger l'image et remplace la vôtre, ou échoue s'il n'a pas accès à Internet.
 4. Créez le projet comme d'habitude. S'il existe déjà : **Arrêter**, **Nettoyer**, puis **Créer**.
 
-Avec un accès SSH, vous pouvez aussi construire directement sur le NAS, depuis une copie du dépôt. Le nom de l'image doit être celui de la ligne `image:` du compose, par exemple : `sudo docker build -t ghcr.io/jegweb/diacamma-syndic:2.7.9-1 .`
+Avec un accès SSH, vous pouvez aussi construire directement sur le NAS, depuis une copie du dépôt. Le nom de l'image doit être celui de la ligne `image:` du compose, par exemple : `sudo docker build -t ghcr.io/jegweb/diacamma-syndic:2.7.10-1 .`
 
 ## Dépannage
 
@@ -343,7 +343,7 @@ Un démarrage normal se termine par `[diacamma] Démarrage de Diacamma Syndic (�
 | « Build project … failed » avec « container diacamma-syndic is unhealthy » | Le conteneur `diacamma-syndic` s'arrête au démarrage. Ce message venait d'une ancienne version de `docker-compose.yml` : avec la version actuelle, le projet est créé et le conteneur apparaît « en redémarrage ». La cause est dans **son** journal (Container Manager → Conteneur → `diacamma-syndic` → Journal), sur les lignes `[diacamma] ERREUR`. Si le conteneur n'apparaît pas, lancez-le au premier plan en SSH, depuis le dossier du projet : `sudo docker compose up diacamma` (Ctrl+C pour arrêter). Le plus souvent, ce sont les droits sur `data/` ou `backups/` (voir [Permissions](#permissions-puidpgid)). |
 | Le conteneur redémarre en boucle | Lisez son journal. Le message commence par `[diacamma] ERREUR`. |
 | « relation "CORE_parameter" does not exist » dans le journal PostgreSQL au premier démarrage | Sans conséquence : Lucterios interroge ses paramètres avant de créer les tables. |
-| « SyntaxWarning: invalid escape sequence » ou « Your models in app(s): 'condominium', 'payoff' have changes that are not yet reflected in a migration » à chaque démarrage | Sans conséquence : ces messages viennent du code de Diacamma et Lucterios eux-mêmes. Ne lancez pas `makemigrations`. |
+| « SyntaxWarning: invalid escape sequence » ou « Your models in app(s): … have changes that are not yet reflected in a migration » à chaque démarrage | Sans conséquence : ces messages viennent du code de Diacamma et Lucterios eux-mêmes. Ne lancez pas `makemigrations`. |
 | « pull access denied » ou « denied » | Si le message cite `diacamma-syndic` sans `ghcr.io`, votre `docker-compose.yml` vient d'une ancienne version, qui construisait l'image sur le NAS : remplacez-le par celui du kit (voir [Mise à jour](#mise-à-jour)). S'il cite `ghcr.io/jegweb/diacamma-syndic`, l'image n'est pas accessible publiquement : signalez-le dans un ticket. |
 | « Error » lors du téléchargement de l'image (« Pulling ») | Container Manager n'affiche pas la cause. Pour la voir, en SSH depuis le dossier du projet : `sudo docker compose pull`. |
 | « manifest unknown » | La version écrite à la fin de la ligne `image:` de `docker-compose.yml` n'existe pas. Le plus souvent, le fichier a été copié depuis la page du dépôt au lieu du kit de la Release ; or il peut viser une version en préparation. Prenez le fichier du kit, ou corrigez la version d'après les [Releases](https://github.com/jegweb/diacamma-syndic-synology/releases), puis **Nettoyer** et **Créer**. |

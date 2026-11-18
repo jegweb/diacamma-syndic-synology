@@ -8,7 +8,7 @@ x-diacamma: &diacamma
   # Image publiée sur GitHub (amd64 et arm64), téléchargée à la création du
   # projet. Version figée : pour mettre à jour, remplacer ce fichier par celui
   # de la nouvelle version (voir README, « Mise à jour »).
-  image: ghcr.io/jegweb/diacamma-syndic:2.7.9-1
+  image: ghcr.io/jegweb/diacamma-syndic:2.7.10-1
   # Image importée ou construite soi-même : décommenter pour ne jamais la
   # télécharger (voir README, « Construire l'image soi-même »).
   # pull_policy: never
