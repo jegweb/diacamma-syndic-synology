@@ -1,5 +1,7 @@
 # Diacamma Syndic : projet pour Synology Container Manager (base SQLite).
 # Réglages dans le fichier .env (copie de .env.example), voir README.md.
+# Prenez ce fichier dans le kit .zip de la dernière Release : celui de la page
+# du dépôt peut viser une version pas encore publiée (« manifest unknown »).
 name: diacamma-syndic
 
 x-diacamma: &diacamma

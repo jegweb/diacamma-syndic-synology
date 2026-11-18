@@ -1,6 +1,8 @@
 # Diacamma Syndic : variante PostgreSQL pour Synology Container Manager.
 # À utiliser à la place de docker-compose.yml (voir README.md, « Variante PostgreSQL »).
 # Prérequis : dossiers postgresql/ et secrets/, mot de passe dans secrets/db_password.txt.
+# Prenez ce fichier dans le kit .zip de la dernière Release : celui de la page
+# du dépôt peut viser une version pas encore publiée (« manifest unknown »).
 name: diacamma-syndic
 
 x-hardening: &hardening

@@ -8,7 +8,7 @@ Versions incluses : Diacamma Syndic 2.7.9 et Lucterios 2.7.9, sur Python 3.13 (D
 
 ## Démarrage rapide
 
-1. Téléchargez le kit `diacamma-syndic-<version>.zip` de la [dernière version](https://github.com/jegweb/diacamma-syndic-synology/releases/latest).
+1. Téléchargez le kit `diacamma-syndic-<version>.zip` de la [dernière version](https://github.com/jegweb/diacamma-syndic-synology/releases/latest). N'utilisez pas les fichiers affichés sur la page du dépôt : ils peuvent viser une version en préparation, pas encore publiée.
 2. Décompressez-le dans `docker/diacamma-syndic` sur le NAS. Créez-y les dossiers `data` et `backups`.
 3. Copiez `.env.example` en `.env` et renseignez au moins `DIACAMMA_ALLOWED_HOSTS`.
 4. Dans Container Manager, créez un projet à partir de ce dossier.
@@ -336,7 +336,9 @@ Avec un accès SSH, vous pouvez aussi construire directement sur le NAS, depuis 
 | Le conteneur redémarre en boucle | Lisez son journal. Le message commence par `[diacamma] ERREUR`. |
 | « relation "CORE_parameter" does not exist » dans le journal PostgreSQL au premier démarrage | Sans conséquence : Lucterios interroge ses paramètres avant de créer les tables. |
 | « pull access denied » ou « denied » | Si le message cite `diacamma-syndic` sans `ghcr.io`, votre `docker-compose.yml` vient d'une ancienne version, qui construisait l'image sur le NAS : remplacez-le par celui du kit (voir [Mise à jour](#mise-à-jour)). S'il cite `ghcr.io/jegweb/diacamma-syndic`, l'image n'est pas accessible publiquement : signalez-le dans un ticket. |
-| « manifest unknown », « not found » ou délai dépassé lors du téléchargement de l'image | Vérifiez la ligne `image:` de `docker-compose.yml` : la version doit exister dans les [Releases](https://github.com/jegweb/diacamma-syndic-synology/releases). Vérifiez aussi que le NAS accède à Internet (DNS, pare-feu). À défaut, voir [Construire l'image soi-même](#construire-limage-soi-même). |
+| « Error » lors du téléchargement de l'image (« Pulling ») | Container Manager n'affiche pas la cause. Pour la voir, en SSH depuis le dossier du projet : `sudo docker compose pull`. |
+| « manifest unknown » | La version écrite à la fin de la ligne `image:` de `docker-compose.yml` n'existe pas. Le plus souvent, le fichier a été copié depuis la page du dépôt au lieu du kit de la Release ; or il peut viser une version en préparation. Prenez le fichier du kit, ou corrigez la version d'après les [Releases](https://github.com/jegweb/diacamma-syndic-synology/releases), puis **Nettoyer** et **Créer**. |
+| « no such host », « i/o timeout » ou « x509: certificate » lors du téléchargement | Le NAS n'arrive pas à joindre `ghcr.io` : vérifiez son DNS, son accès à Internet et son horloge (Panneau de configuration → Options régionales). À défaut, voir [Construire l'image soi-même](#construire-limage-soi-même). |
 | Une image importée est remplacée ou ignorée | Décommentez `pull_policy: never` dans `docker-compose.yml` (voir [Construire l'image soi-même](#construire-limage-soi-même)). |
 
 ## Sécurité : récapitulatif
