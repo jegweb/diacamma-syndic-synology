@@ -4,6 +4,20 @@ Les versions s'écrivent `X.Y.Z-N` : `X.Y.Z` est la version de Diacamma Syndic i
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/).
 
+## [2.7.10-2]
+
+Révision de sécurité. Les versions de Diacamma et Lucterios sont les mêmes que dans 2.7.10-1 : la mise à jour ne lance aucune migration.
+
+### Sécurité
+
+- Les correctifs de sécurité Debian sont appliqués pendant la construction (`apt-get upgrade`), dont celui de zlib (CVE-2026-85091).
+- pip est retiré de l'image. Il ne servait pas à l'exécution et embarquait des versions vulnérables de urllib3 (CVE-2026-97687, CVE-2026-97689), msgpack (CVE-2026-114613, GHSA-6v7p-g79w-8964) et setuptools (CVE-2025-47273). Conséquence : `diacamma admin check` et `diacamma admin update` ne fonctionnent plus, car les mises à jour passent par une nouvelle image.
+
+### Ajouté
+
+- Analyse hebdomadaire des failles de l'image publiée, avec Trivy.
+- Modèle de pull request.
+
 ## [2.7.10-1] - 2026-11-19
 
 **Faites une sauvegarde avant la mise à jour.** Au premier démarrage, le conteneur détecte la nouvelle version. Il prend alors un instantané de la base SQLite dans `backups/avant-mise-a-jour/`. Cette version ne modifie pas la structure de la base : elle n'apporte aucune nouvelle migration. Suivez l'opération dans le journal.

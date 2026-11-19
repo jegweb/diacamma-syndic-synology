@@ -10,6 +10,10 @@ COPY requirements.lock /tmp/requirements.lock
 # --no-deps : le verrou est complet et exclut volontairement PyQt6.
 # pip check : arrête la construction si le verrou viole une exigence déclarée
 # par un paquet (seule l'absence de PyQt6 est attendue).
+# pip est ensuite retiré du venv : il ne sert pas à l'exécution (seuls
+# « lucterios_admin check/update » l'appellent, et les mises à jour passent par
+# l'image), et ses bibliothèques embarquées (urllib3, msgpack, setuptools) ont
+# leurs propres failles.
 RUN python -m venv /opt/venv \
  && /opt/venv/bin/pip install --no-deps -r /tmp/requirements.lock \
  && (/opt/venv/bin/pip check || true) > /tmp/pip-check.txt \
@@ -18,18 +22,24 @@ RUN python -m venv /opt/venv \
     fi \
  && /opt/venv/bin/python -m compileall -q -j 0 /opt/venv \
  && /opt/venv/bin/pip freeze > /opt/venv/versions.txt \
- && /opt/venv/bin/python -c "import importlib.metadata as m; print('-'.join(m.version(p) for p in ('diacamma-syndic', 'diacamma-financial', 'lucterios', 'lucterios-contacts', 'lucterios-documents')))" > /opt/venv/diacamma-build-id
+ && /opt/venv/bin/python -c "import importlib.metadata as m; print('-'.join(m.version(p) for p in ('diacamma-syndic', 'diacamma-financial', 'lucterios', 'lucterios-contacts', 'lucterios-documents')))" > /opt/venv/diacamma-build-id \
+ && /opt/venv/bin/python -m pip uninstall -y -q pip
 
 FROM ${PYTHON_IMAGE}
 ARG DEBIAN_FRONTEND=noninteractive
 # locales : Lucterios bascule en anglais si fr_FR.UTF-8 est absente.
 # libcairo2 (CairoSVG), poppler-utils (pdf2image), libmagic1 (détection MIME).
+# apt-get upgrade : correctifs de sécurité Debian publiés après l'image de base.
+# Le pip du Python système est retiré (inutile à l'exécution, voir plus haut).
 RUN apt-get update \
+ && apt-get upgrade -y \
  && apt-get install -y --no-install-recommends \
       locales tzdata tini libcairo2 poppler-utils libmagic1 fonts-dejavu-core \
  && sed -i -E 's/^# *((fr_FR|en_US)\.UTF-8 UTF-8)/\1/' /etc/locale.gen \
  && locale-gen \
- && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/* \
+ && python -m pip uninstall -y -q --root-user-action=ignore pip \
+ && rm -rf /root/.cache
 
 COPY --from=builder /opt/venv /opt/venv
 COPY docker/ /opt/diacamma/

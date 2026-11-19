@@ -1,0 +1,45 @@
+# Analyse hebdomadaire des failles de l'image publiée (paquets Debian et
+# Python), avec Trivy. Seules les failles HIGH ou CRITICAL déjà corrigées en
+# amont sont signalées : un échec appelle une révision de l'image (voir
+# CONTRIBUTING.md, « Correctifs de sécurité »). GitHub envoie un courriel au
+# propriétaire du dépôt quand une exécution planifiée échoue.
+name: Failles de sécurité
+
+on:
+  schedule:
+    - cron: "23 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  trivy:
+    runs-on: ubuntu-24.04
+    env:
+      # Version épinglée ; Dependabot ne la suit pas : la mettre à jour à la main.
+      TRIVY: aquasec/trivy:0.76.1
+    steps:
+      - uses: actions/checkout@v7
+      - name: Analyse de la dernière version publiée
+        run: |
+          set -o pipefail
+          image="$(sed -nE 's/^ *image: *([^ :]*diacamma-syndic):.*/\1/p' docker-compose.yml | head -n 1):latest"
+          echo "Image analysée : $image"
+          docker run --rm "$TRIVY" image --quiet --image-src remote --platform linux/amd64 \
+            --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed \
+            --table-mode detailed --format table --exit-code 1 "$image" | tee rapport.txt
+      - name: Résumé
+        if: always()
+        run: |
+          {
+            echo "### Failles HIGH/CRITICAL corrigées en amont"
+            echo
+            if [[ -s rapport.txt ]] && grep -q 'Total:' rapport.txt; then
+              echo '```text'
+              cat rapport.txt
+              echo '```'
+            else
+              echo "Aucune."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

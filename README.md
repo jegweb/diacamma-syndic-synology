@@ -278,7 +278,7 @@ En SSH, préfixez chaque commande par `sudo docker exec -it diacamma-syndic`, pa
 | `diacamma reset-admin-password` | Génère un nouveau mot de passe pour `admin` et réactive le compte |
 | `diacamma version` | Affiche les versions de Diacamma, Lucterios et Django |
 | `diacamma manage <args>` | Lance une commande Django `manage.py` sur l'instance |
-| `diacamma admin <args>` | Lance une commande `lucterios_admin` (usage avancé) |
+| `diacamma admin <args>` | Lance une commande `lucterios_admin` (usage avancé). `check` et `update` ne fonctionnent pas : les mises à jour passent par une nouvelle image. |
 
 ## Variante PostgreSQL
 
@@ -324,7 +324,7 @@ Utile si le NAS n'a pas accès à `ghcr.io`, ou pour tester une image modifiée.
 3. Dans `docker-compose.yml` sur le NAS, décommentez la ligne `# pull_policy: never` (retirez le `#`). Sans cela, Container Manager essaie de télécharger l'image et remplace la vôtre, ou échoue s'il n'a pas accès à Internet.
 4. Créez le projet comme d'habitude. S'il existe déjà : **Arrêter**, **Nettoyer**, puis **Créer**.
 
-Avec un accès SSH, vous pouvez aussi construire directement sur le NAS, depuis une copie du dépôt. Le nom de l'image doit être celui de la ligne `image:` du compose, par exemple : `sudo docker build -t ghcr.io/jegweb/diacamma-syndic:2.7.10-1 .`
+Avec un accès SSH, vous pouvez aussi construire directement sur le NAS, depuis une copie du dépôt. Le nom de l'image doit être celui de la ligne `image:` du compose, par exemple : `sudo docker build -t ghcr.io/jegweb/diacamma-syndic:2.7.10-2 .`
 
 ## Dépannage
 
