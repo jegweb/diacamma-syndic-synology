@@ -22,9 +22,10 @@ Il faut Docker sur un ordinateur (amd64 ou Mac Apple Silicon).
 
 ```sh
 docker build -t diacamma-syndic:local .
-scripts/smoke-test.sh diacamma-syndic:local                # base SQLite
-scripts/smoke-test.sh --postgresql diacamma-syndic:local   # base PostgreSQL
-scripts/smoke-test.sh --depuis ghcr.io/jegweb/diacamma-syndic:latest diacamma-syndic:local   # mise à jour
+scripts/smoke-test.sh diacamma-syndic:local            # base PostgreSQL
+scripts/smoke-test.sh --sqlite diacamma-syndic:local   # base SQLite
+scripts/smoke-test.sh --depuis ghcr.io/jegweb/diacamma-syndic:latest diacamma-syndic:local            # mise à jour
+scripts/smoke-test.sh --sqlite --depuis ghcr.io/jegweb/diacamma-syndic:latest diacamma-syndic:local   # mise à jour, SQLite
 docker run --rm -v "$PWD:/mnt:ro" koalaman/shellcheck:stable docker/bin/diacamma scripts/*.sh
 ```
 
@@ -32,7 +33,9 @@ docker run --rm -v "$PWD:/mnt:ro" koalaman/shellcheck:stable docker/bin/diacamma
 
 - la connexion, et le refus de `admin`/`admin` ;
 - `/static/settings.py` et `/static/db.sqlite3` en 404, un hôte inconnu en 400 ;
-- la sauvegarde puis la restauration.
+- la sauvegarde puis la restauration ;
+- en PostgreSQL, la création du mot de passe de la base dans `secrets/` ;
+- avec `--sqlite`, le refus du compose PostgreSQL sur une instance SQLite, sans modification de la base.
 
 Avec `--depuis`, il installe d'abord l'ancienne image, puis passe à la nouvelle, comme un utilisateur qui met à jour. Si les versions des paquets diffèrent, il vérifie la détection de la mise à jour, l'instantané SQLite et les migrations. Sinon, il vérifie qu'aucune migration n'est lancée.
 
@@ -55,7 +58,7 @@ Les versions s'écrivent `X.Y.Z-N` (voir [CHANGELOG.md](CHANGELOG.md)).
 1. **Nouvelle version de Diacamma** : lancez `scripts/update-lock.sh`, vérifiez les versions affichées et mettez à jour la ligne « Versions incluses » du README. La révision repart à `-1`.
    Comparez ensuite le nouveau verrou à l'ancien (`git diff requirements.lock`). Repérez chaque **dépendance indirecte qui change de version majeure** sans que l'amont l'exige : regardez sur PyPI ses `Requires-Dist` et la date de sortie de la nouvelle majeure. Si cette majeure est sortie **après** la version amont de Diacamma, l'amont n'a pas pu la tester. Plafonnez-la alors dans la section « Plafonds prudents » de `requirements.in`, en indiquant la date et qui la tire, puis relancez `update-lock.sh`. Retirez les plafonds de la version précédente que l'amont a depuis rattrapés.
    **Révision** (correctif du conteneur, ou correctifs de sécurité Debian et Python) : gardez `requirements.lock` et incrémentez `N`.
-2. Remplacez le tag de l'image dans `docker-compose.yml` **et** `docker-compose.postgresql.yml`.
+2. Remplacez le tag de l'image dans `docker-compose.yml` **et** `docker-compose.sqlite.yml`, ainsi que dans l'exemple de `docker build` du README.
 3. Ajoutez l'entrée `## [X.Y.Z-N]` au CHANGELOG.
 4. Testez (voir plus haut), commitez, puis poussez une pré-version : `git tag vX.Y.Z-N-rc1 && git push origin vX.Y.Z-N-rc1`.
 5. Le workflow « Publication » vérifie la cohérence de l'étiquette, des compose, du verrou et du CHANGELOG. Il construit et teste l'image sur amd64 et arm64, la publie sur ghcr.io et crée une Release marquée comme pré-version. Testez le kit sur un NAS.

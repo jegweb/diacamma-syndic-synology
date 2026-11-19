@@ -1,26 +1,32 @@
-# Diacamma Syndic : projet pour Synology Container Manager (base SQLite).
-# Réglages dans le fichier .env (copie de .env.example), voir README.md.
+# Diacamma Syndic : projet pour Synology Container Manager (base PostgreSQL).
+# Prérequis : dossiers data, backups, postgresql et secrets, créés avec File
+# Station. Réglages dans le fichier .env (copie de .env.example), voir README.md.
 # Prenez ce fichier dans le kit .zip de la dernière Release : celui de la page
 # du dépôt peut viser une version pas encore publiée (« manifest unknown »).
 name: diacamma-syndic
 
-x-diacamma: &diacamma
-  # Image publiée sur GitHub (amd64 et arm64), téléchargée à la création du
-  # projet. Version figée : pour mettre à jour, remplacer ce fichier par celui
-  # de la nouvelle version (voir README, « Mise à jour »).
-  image: ghcr.io/jegweb/diacamma-syndic:2.7.10-2
-  # Image importée ou construite soi-même : décommenter pour ne jamais la
-  # télécharger (voir README, « Construire l'image soi-même »).
-  # pull_policy: never
+x-hardening: &hardening
   user: "${PUID:-1026}:${PGID:-100}"
   restart: unless-stopped
-  read_only: true
-  tmpfs:
-    - /tmp:size=512m,mode=1777
   cap_drop:
     - ALL
   security_opt:
     - no-new-privileges:true
+  # Pas de section « logging » : Container Manager n'affiche que les journaux
+  # écrits par le pilote par défaut de Synology, pas ceux de json-file.
+
+x-diacamma: &diacamma
+  <<: *hardening
+  # Image publiée sur GitHub (amd64 et arm64), téléchargée à la création du
+  # projet. Version figée : pour mettre à jour, remplacer ce fichier par celui
+  # de la nouvelle version (voir README, « Mise à jour »).
+  image: ghcr.io/jegweb/diacamma-syndic:2.7.10-3
+  # Image importée ou construite soi-même : décommenter pour ne jamais la
+  # télécharger (voir README, « Construire l'image soi-même »).
+  # pull_policy: never
+  read_only: true
+  tmpfs:
+    - /tmp:size=512m,mode=1777
   environment:
     TZ: ${TZ:-Europe/Paris}
     DIACAMMA_ALLOWED_HOSTS: ${DIACAMMA_ALLOWED_HOSTS:-}
@@ -31,13 +37,60 @@ x-diacamma: &diacamma
     GUNICORN_THREADS: ${GUNICORN_THREADS:-4}
     BACKUP_TIME: ${BACKUP_TIME:-02:30}
     BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-30}
+    DIACAMMA_DB_ENGINE: postgresql
+    DIACAMMA_DB_HOST: db
+    DIACAMMA_DB_NAME: diacamma
+    DIACAMMA_DB_USER: diacamma
+    DIACAMMA_DB_PASSWORD_FILE: /secrets/db_password.txt
   volumes:
     - ./data:/data
     - ./backups:/backups
-  # Pas de section « logging » : Container Manager n'affiche que les journaux
-  # écrits par le pilote par défaut de Synology, pas ceux de json-file.
+    - ./secrets:/secrets:ro
+  networks:
+    - default
+    - backend
 
 services:
+  db:
+    <<: *hardening
+    # Lancée sous PUID:PGID (pas de root) ; l'image Debian gère les UID arbitraires.
+    image: postgres:17
+    container_name: diacamma-syndic-db
+    # Au premier démarrage, crée un mot de passe aléatoire dans
+    # secrets/db_password.txt, puis lance PostgreSQL normalement.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        f=/secrets/db_password.txt
+        if [ ! -s "$$f" ]; then
+          if [ -s "$$PGDATA/PG_VERSION" ]; then
+            echo "[diacamma-db] ERREUR : la base existe déjà dans postgresql/, mais secrets/db_password.txt manque ou est vide. Diacamma en garde une copie dans data/syndic/settings.py : recréez le fichier (README, « Dépannage »)." >&2
+            exit 1
+          fi
+          if ! (umask 077 && tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 32 > "$$f.tmp" && mv "$$f.tmp" "$$f"); then
+            echo "[diacamma-db] ERREUR : impossible d'écrire dans le dossier secrets. Créez-le vous-même avec File Station (README, « Permissions »)." >&2
+            exit 1
+          fi
+          echo "[diacamma-db] Mot de passe de la base créé dans secrets/db_password.txt : laissez ce fichier en place."
+        fi
+        exec docker-entrypoint.sh postgres
+    environment:
+      POSTGRES_DB: diacamma
+      POSTGRES_USER: diacamma
+      POSTGRES_PASSWORD_FILE: /secrets/db_password.txt
+    volumes:
+      - ./postgresql:/var/lib/postgresql/data
+      - ./secrets:/secrets
+    networks:
+      - backend
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "diacamma", "-d", "diacamma"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   diacamma:
     <<: *diacamma
     container_name: diacamma-syndic
@@ -47,6 +100,11 @@ services:
     ports:
       - "127.0.0.1:8100:8000"
     mem_limit: 1g
+    # « started » et non « healthy » : si la base ne démarre pas, le projet reste
+    # créé et les journaux visibles. L'application attend elle-même la base.
+    depends_on:
+      db:
+        condition: service_started
 
   sauvegarde:
     <<: *diacamma
@@ -61,3 +119,8 @@ services:
         condition: service_started
     healthcheck:
       disable: true
+
+networks:
+  # Réseau sans accès extérieur : la base n'est joignable que par Diacamma.
+  backend:
+    internal: true

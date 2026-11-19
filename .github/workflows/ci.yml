@@ -1,5 +1,5 @@
 # Intégration continue : lint, construction de l'image et test de fumée
-# (SQLite et PostgreSQL). Chaque mois, reconstruction sans cache avec l'image
+# (PostgreSQL et SQLite). Chaque mois, reconstruction sans cache avec l'image
 # de base Python/Debian à jour, pour repérer tôt une casse.
 name: CI
 
@@ -33,7 +33,7 @@ jobs:
       matrix:
         # mise-a-jour : installe la dernière version publiée, puis passe à
         # l'image construite (détection de la mise à jour, instantané, migrations).
-        variant: [sqlite, postgresql, mise-a-jour]
+        variant: [postgresql, sqlite, mise-a-jour, mise-a-jour-sqlite]
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
@@ -52,10 +52,10 @@ jobs:
         env:
           VARIANT: ${{ matrix.variant }}
         run: |
+          published="$(sed -nE 's/^ *image: *([^ :]*diacamma-syndic):.*/\1/p' docker-compose.yml | head -n 1):latest"
           case "$VARIANT" in
-            postgresql) scripts/smoke-test.sh --postgresql diacamma-syndic:ci ;;
-            mise-a-jour)
-              published="$(sed -nE 's/^ *image: *([^ :]*diacamma-syndic):.*/\1/p' docker-compose.yml | head -n 1):latest"
-              scripts/smoke-test.sh --depuis "$published" diacamma-syndic:ci ;;
+            sqlite) scripts/smoke-test.sh --sqlite diacamma-syndic:ci ;;
+            mise-a-jour) scripts/smoke-test.sh --depuis "$published" diacamma-syndic:ci ;;
+            mise-a-jour-sqlite) scripts/smoke-test.sh --sqlite --depuis "$published" diacamma-syndic:ci ;;
             *) scripts/smoke-test.sh diacamma-syndic:ci ;;
           esac

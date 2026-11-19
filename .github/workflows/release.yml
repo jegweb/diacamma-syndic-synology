@@ -30,7 +30,7 @@ jobs:
           base="$upstream-${BASH_REMATCH[2]}"
           version="${GITHUB_REF_NAME#v}"
           image=""
-          for f in docker-compose.yml docker-compose.postgresql.yml; do
+          for f in docker-compose.yml docker-compose.sqlite.yml; do
             ref="$(sed -nE 's/^ *image: *(ghcr\.io\/[^ ]*diacamma-syndic:[^ ]+).*/\1/p' "$f" | head -n 1)"
             [[ "${ref##*:}" == "$base" ]] || err "$f référence « $ref » au lieu de la version $base."
             [[ -z "$image" || "$image" == "${ref%:*}" ]] || err "Les deux compose ne référencent pas la même image."
@@ -86,8 +86,11 @@ jobs:
         run: |
           if docker buildx imagetools inspect "$IMAGE:latest" >/dev/null 2>&1; then
             scripts/smoke-test.sh --depuis "$IMAGE:latest" "$IMAGE:$VERSION-${{ matrix.arch }}"
+            # Installations SQLite existantes ; couvre aussi les contrôles SQLite.
+            scripts/smoke-test.sh --sqlite --depuis "$IMAGE:latest" "$IMAGE:$VERSION-${{ matrix.arch }}"
           else
-            echo "Aucune version publiée : test de mise à jour ignoré."
+            echo "Aucune version publiée : test de mise à jour remplacé par une installation SQLite."
+            scripts/smoke-test.sh --sqlite "$IMAGE:$VERSION-${{ matrix.arch }}"
           fi
       - uses: docker/login-action@v4
         with:
@@ -134,11 +137,11 @@ jobs:
         run: |
           kit="diacamma-syndic-$VERSION"
           mkdir -p "dist/$kit"
-          for f in docker-compose.yml docker-compose.postgresql.yml; do
+          for f in docker-compose.yml docker-compose.sqlite.yml; do
             sed -E "s|^( *image: *)ghcr\.io/[^ ]*diacamma-syndic:[^ ]+|\1$IMAGE:$VERSION|" "$f" > "dist/$kit/$f"
           done
           cp .env.example "dist/$kit/"
-          (cd "dist/$kit" && zip -X "../$kit.zip" docker-compose.yml docker-compose.postgresql.yml .env.example)
+          (cd "dist/$kit" && zip -X "../$kit.zip" docker-compose.yml docker-compose.sqlite.yml .env.example)
           unzip -l "dist/$kit.zip"
       - name: Release GitHub
         run: |

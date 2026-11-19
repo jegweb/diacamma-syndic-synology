@@ -4,6 +4,23 @@ Les versions s'écrivent `X.Y.Z-N` : `X.Y.Z` est la version de Diacamma Syndic i
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/).
 
+## [2.7.10-3]
+
+PostgreSQL devient la base recommandée. Les versions de Diacamma et Lucterios sont les mêmes que dans 2.7.10-2 : la mise à jour ne lance aucune migration.
+
+**Installations SQLite existantes** (projet sans dossier `postgresql`, soit toutes celles faites avec le `docker-compose.yml` des versions précédentes) : pour la mise à jour, prenez `docker-compose.sqlite.yml` et renommez-le en `docker-compose.yml`. Si vous gardez par erreur le `docker-compose.yml` du kit, le conteneur refuse de démarrer sans toucher aux données, et son journal indique le bon fichier. Pour passer à PostgreSQL, suivez la section « Changer de base de données » du README.
+
+### Modifié
+
+- `docker-compose.yml` utilise désormais PostgreSQL. SQLite passe dans `docker-compose.sqlite.yml`, qui convient quand une seule personne saisit à la fois. Avec SQLite, deux enregistrements simultanés, ou un enregistrement pendant une opération longue, peuvent échouer avec « database is locked ». Le README explique le choix, y compris pourquoi MariaDB n'est pas proposé.
+- `docker-compose.postgresql.yml` est remplacé par `docker-compose.yml`. Les installations PostgreSQL existantes gardent leur fichier `secrets/db_password.txt`.
+- Diacamma n'attend plus l'état « healthy » de la base pour démarrer : il l'attend lui-même, avec des messages explicites. Si la base ne démarre pas, le projet reste créé dans Container Manager et les journaux restent lisibles.
+
+### Ajouté
+
+- Le mot de passe de la base PostgreSQL est créé automatiquement au premier démarrage, dans `secrets/db_password.txt`. Il n'y a plus de fichier à créer à la main.
+- Message explicite quand le compose ne correspond pas au moteur de l'instance (SQLite ou PostgreSQL), avec le fichier à prendre.
+
 ## [2.7.10-2] - 2026-11-19
 
 Révision de sécurité. Les versions de Diacamma et Lucterios sont les mêmes que dans 2.7.10-1 : la mise à jour ne lance aucune migration.

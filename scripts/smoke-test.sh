@@ -3,8 +3,10 @@
 # la connexion, les protections (admin/admin, /static/, hôte inconnu) et les
 # commandes de sauvegarde et de restauration. Code de retour non nul en cas d'échec.
 #
-# Usage : scripts/smoke-test.sh [--postgresql] [--depuis <ancienne image>] [image]
+# Usage : scripts/smoke-test.sh [--sqlite] [--depuis <ancienne image>] [image]
 #   image : image à tester (défaut : celle du compose).
+#   --sqlite : variante SQLite (docker-compose.sqlite.yml) au lieu de PostgreSQL.
+#     Vérifie aussi qu'un compose PostgreSQL est refusé sur une instance SQLite.
 #   --depuis : installe d'abord l'ancienne image, puis passe à la nouvelle, comme
 #     un utilisateur qui met à jour. Vérifie la détection de la mise à jour, les
 #     migrations et l'instantané SQLite (si les versions des paquets diffèrent).
@@ -18,11 +20,12 @@ cd "$(dirname "$0")/.."
 log() { printf '[test] %s\n' "$*"; }
 fail() { printf '[test] ÉCHEC : %s\n' "$*" >&2; exit 1; }
 
+ENGINE=postgresql
 COMPOSE_SRC=docker-compose.yml
 FROM_IMAGE=""
 while (( $# > 0 )); do
   case "$1" in
-    --postgresql) COMPOSE_SRC=docker-compose.postgresql.yml; shift ;;
+    --sqlite) ENGINE=sqlite; COMPOSE_SRC=docker-compose.sqlite.yml; shift ;;
     --depuis) FROM_IMAGE="${2:-}"; [[ -n "$FROM_IMAGE" ]] || fail "--depuis demande une image."; shift 2 ;;
     -*) fail "option inconnue : $1" ;;
     *) break ;;
@@ -76,9 +79,10 @@ build_id() {
     echo "PGID=$(id -g)"
   fi
 } > "$T/.env"
-if [[ "$COMPOSE_SRC" == docker-compose.postgresql.yml ]]; then
+# Dossiers vides, comme créés avec File Station : le mot de passe de la base
+# est généré au premier démarrage.
+if [[ "$ENGINE" == postgresql ]]; then
   mkdir -p "$T/postgresql" "$T/secrets"
-  openssl rand -hex 16 > "$T/secrets/db_password.txt"
 fi
 
 wait_healthy() {
@@ -95,6 +99,18 @@ wait_healthy() {
     waited=$(( waited + 5 ))
   done
   fail "« $APP » n'est pas healthy après ${TIMEOUT} s."
+}
+
+# Les images publiées jusqu'à 2.7.10-2 n'attendent pas PostgreSQL : pour
+# elles, on démarre la base d'abord (comme l'ancien compose, en « healthy »).
+start_db_first() {
+  local waited=0
+  compose up -d --quiet-pull db
+  until [[ "$(docker inspect -f '{{.State.Health.Status}}' "$APP-db")" == healthy ]]; do
+    (( waited < 180 )) || fail "« $APP-db » n'est pas healthy après 180 s."
+    sleep 3
+    waited=$(( waited + 3 ))
+  done
 }
 
 http_code() { curl -s -o /dev/null -w '%{http_code}' -H "Host: ${2:-$HOST}" "$URL$1"; }
@@ -117,6 +133,7 @@ check_login() {
 log "Dossier de test : $T ($COMPOSE_SRC, image $IMAGE${FROM_IMAGE:+, depuis $FROM_IMAGE})"
 if [[ -n "$FROM_IMAGE" ]]; then
   set_image "$FROM_IMAGE"
+  [[ "$ENGINE" == sqlite ]] || start_db_first
   compose up -d --quiet-pull
   wait_healthy
   check_login
@@ -129,10 +146,13 @@ if [[ -n "$FROM_IMAGE" ]]; then
   if [[ "$old_id" != "$new_id" ]]; then
     docker logs "$APP" 2>&1 | grep -F "Mise à jour détectée : $old_id -> $new_id" >/dev/null \
       || fail "la mise à jour $old_id -> $new_id n'a pas été détectée."
-    if [[ "$COMPOSE_SRC" == docker-compose.yml ]]; then
+    if [[ "$ENGINE" == sqlite ]]; then
       find "$T/backups/avant-mise-a-jour" -name 'syndic_*.tar.gz' 2>/dev/null | grep . >/dev/null \
         || fail "aucun instantané dans backups/avant-mise-a-jour/."
       log "OK : instantané SQLite pris avant la mise à jour."
+    else
+      docker logs "$APP" 2>&1 | grep -F "pas d'instantané automatique" >/dev/null \
+        || fail "l'absence d'instantané PostgreSQL n'est pas signalée."
     fi
     log "OK : mise à jour détectée et migrations appliquées ($old_id -> $new_id)."
   else
@@ -146,6 +166,11 @@ else
 fi
 [[ "$(docker inspect -f '{{.State.Running}}' "$APP-sauvegarde")" == true ]] || fail "le service de sauvegarde ne tourne pas."
 log "OK : service de sauvegarde lancé."
+if [[ "$ENGINE" == postgresql ]]; then
+  [[ "$(wc -c < "$T/secrets/db_password.txt" | tr -d ' ')" == 32 ]] \
+    || fail "secrets/db_password.txt n'a pas été généré (32 caractères attendus)."
+  log "OK : mot de passe de la base généré dans secrets/."
+fi
 
 check_login
 login admin admin | grep BADAUTH >/dev/null || fail "admin/admin n'est pas refusé."
@@ -168,5 +193,23 @@ docker exec "$APP" diacamma restore "$archive"
 docker restart "$APP" >/dev/null
 check_login
 log "OK : restauration puis redémarrage."
+
+# Utilisateur SQLite qui prend par erreur le compose PostgreSQL du kit (sans
+# créer postgresql/ ni secrets/) : refus explicite, base intacte.
+if [[ "$ENGINE" == sqlite ]]; then
+  compose down >/dev/null 2>&1
+  before="$(cksum < "$T/data/syndic/db.sqlite3")"
+  cp docker-compose.yml "$T/docker-compose.yml"
+  set_image "$IMAGE"
+  compose up -d --quiet-pull
+  tries=0
+  until docker logs "$APP" 2>&1 | grep -F "prenez docker-compose.sqlite.yml" >/dev/null; do
+    (( ++tries < 30 )) || fail "le compose PostgreSQL n'est pas refusé sur une instance SQLite."
+    sleep 3
+  done
+  compose stop >/dev/null 2>&1
+  [[ "$(cksum < "$T/data/syndic/db.sqlite3")" == "$before" ]] || fail "la base SQLite a été modifiée par le compose PostgreSQL."
+  log "OK : compose PostgreSQL refusé sur une instance SQLite, base intacte."
+fi
 
 log "Tous les contrôles sont passés."

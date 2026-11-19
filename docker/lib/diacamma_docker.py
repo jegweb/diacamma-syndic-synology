@@ -265,6 +265,62 @@ def snapshot_sqlite(instance, destination):
         work_copy.unlink(missing_ok=True)
 
 
+def db_password():
+    """Mot de passe PostgreSQL, lu comme dans bin/diacamma (fichier d'abord).
+
+    Lève OSError si le fichier n'existe pas encore : au premier démarrage, il
+    est créé par le conteneur de la base, qui démarre en même temps.
+    """
+    path = os.environ.get('DIACAMMA_DB_PASSWORD_FILE', '')
+    if not path:
+        return os.environ.get('DIACAMMA_DB_PASSWORD', '')
+    return Path(path).read_text(encoding='utf-8').rstrip('\n')
+
+
+def wait_postgresql(timeout=300):
+    """Attend le mot de passe et que PostgreSQL accepte la connexion.
+
+    Le compose ne fait pas attendre l'état « healthy » de la base : un échec
+    de « Créer » dans Container Manager ne laisserait aucun journal lisible.
+    """
+    import time
+    import psycopg2
+
+    host = os.environ.get('DIACAMMA_DB_HOST', '')
+    port = os.environ.get('DIACAMMA_DB_PORT', '5432')
+    params = {
+        'host': host, 'port': port, 'connect_timeout': 5,
+        'dbname': os.environ.get('DIACAMMA_DB_NAME', ''),
+        'user': os.environ.get('DIACAMMA_DB_USER', ''),
+    }
+    start = time.monotonic()
+    next_log = 0
+    while True:
+        try:
+            params['password'] = db_password()
+            psycopg2.connect(**params).close()
+            return
+        except OSError as exc:
+            detail = f'{exc.filename} : {exc.strerror}'
+        except psycopg2.OperationalError as exc:
+            detail = ' '.join(str(exc).split())
+            if 'password authentication failed' in detail:
+                fail('PostgreSQL refuse le mot de passe de secrets/db_password.txt : la base du dossier '
+                     'postgresql/ a été créée avec un autre mot de passe. Le bon est gardé dans '
+                     'data/syndic/settings.py : recréez le fichier à partir de lui (README, « Dépannage »).')
+            if 'does not exist' in detail:
+                fail(f'la base du dossier postgresql/ ne correspond pas à ce projet : {detail}')
+        elapsed = time.monotonic() - start
+        if elapsed >= timeout:
+            fail(f'la base PostgreSQL ({host}:{port}) ne répond pas après {timeout} s. Consultez le journal '
+                 'du conteneur diacamma-syndic-db : le plus souvent, les dossiers postgresql ou secrets '
+                 f'n\'ont pas été créés avec File Station (README, « Permissions »). Détail : {detail}')
+        if elapsed >= next_log:
+            log(f'En attente de la base PostgreSQL ({host}:{port})…')
+            next_log += 15
+        time.sleep(2)
+
+
 def main(argv):
     commands = {
         'extra-settings': lambda: extra_settings(),
@@ -272,6 +328,7 @@ def main(argv):
         'reset-admin-password': lambda instance: secure_admin(instance, force=True),
         'clean-static': lambda instance: clean_static(instance),
         'snapshot-sqlite': lambda instance, destination: snapshot_sqlite(instance, destination),
+        'wait-postgresql': lambda: wait_postgresql(),
     }
     if not argv or argv[0] not in commands:
         fail(f'commande interne inconnue : {" ".join(argv)!r}.')

@@ -37,8 +37,8 @@ body:
     attributes:
       label: Base de données
       options:
-        - SQLite (docker-compose.yml)
-        - PostgreSQL (docker-compose.postgresql.yml)
+        - PostgreSQL (un dossier postgresql existe dans le projet)
+        - SQLite (pas de dossier postgresql)
     validations:
       required: true
   - type: dropdown

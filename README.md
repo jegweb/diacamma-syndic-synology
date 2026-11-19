@@ -9,7 +9,7 @@ Versions incluses : Diacamma Syndic 2.7.10 et Lucterios 2.7.10, sur Python 3.13 
 ## Démarrage rapide
 
 1. Téléchargez le kit `diacamma-syndic-<version>.zip` de la [dernière version](https://github.com/jegweb/diacamma-syndic-synology/releases/latest). N'utilisez pas les fichiers affichés sur la page du dépôt : ils peuvent viser une version en préparation, pas encore publiée.
-2. Décompressez-le dans `docker/diacamma-syndic` sur le NAS. Créez-y les dossiers `data` et `backups`.
+2. Décompressez-le dans `docker/diacamma-syndic` sur le NAS. Créez-y les dossiers `data`, `backups`, `postgresql` et `secrets`.
 3. Copiez `.env.example` en `.env` et renseignez au moins `DIACAMMA_ALLOWED_HOSTS`.
 4. Dans Container Manager, créez un projet à partir de ce dossier.
 5. Récupérez le mot de passe `admin` dans le journal du conteneur.
@@ -25,7 +25,7 @@ Le détail de chaque étape est dans [Installation](#installation), et l'accès 
 5. [Sauvegardes et restauration](#sauvegardes-et-restauration)
 6. [Mise à jour](#mise-à-jour)
 7. [Commandes d'administration](#commandes-dadministration)
-8. [Variante PostgreSQL](#variante-postgresql)
+8. [Choix de la base de données](#choix-de-la-base-de-données)
 9. [Permissions (PUID/PGID)](#permissions-puidpgid)
 10. [Construire l'image soi-même](#construire-limage-soi-même)
 11. [Dépannage](#dépannage)
@@ -34,26 +34,29 @@ Le détail de chaque étape est dans [Installation](#installation), et l'accès 
 
 ## Fonctionnement
 
-Le projet lance deux conteneurs, à partir de la même image :
+Le projet lance trois conteneurs : deux à partir de l'image Diacamma, et la base de données.
 
 | Conteneur | Rôle |
 | --- | --- |
 | `diacamma-syndic` | L'application web (gunicorn). Au démarrage, il crée l'instance ou la met à jour (migrations, fichiers statiques). |
 | `diacamma-syndic-sauvegarde` | Crée chaque nuit une archive Diacamma (`.lbk`) et supprime les plus anciennes. |
+| `diacamma-syndic-db` | La base PostgreSQL (image officielle `postgres:17`), joignable seulement par les deux autres conteneurs. |
 
-Les données se trouvent dans deux dossiers du projet sur le NAS :
+Les données se trouvent dans quatre dossiers du projet sur le NAS :
 
 | Dossier | Contenu |
 | --- | --- |
-| `data/` | L'instance Diacamma : réglages, base SQLite, documents, fichiers statiques |
-| `backups/` | Les archives `.lbk` (visibles et restaurables depuis l'interface de Diacamma) et les instantanés pris avant chaque mise à jour |
+| `data/` | L'instance Diacamma : réglages, documents, fichiers statiques |
+| `backups/` | Les archives `.lbk` (visibles et restaurables depuis l'interface de Diacamma) |
+| `postgresql/` | La base de données |
+| `secrets/` | Le mot de passe interne de la base (`db_password.txt`), créé au premier démarrage. Laissez-le en place. |
 
 Fichiers du kit d'installation, seuls nécessaires sur le NAS :
 
 | Fichier | Rôle |
 | --- | --- |
-| `docker-compose.yml` | Projet Container Manager (base SQLite, recommandé) |
-| `docker-compose.postgresql.yml` | Variante avec une base PostgreSQL |
+| `docker-compose.yml` | Projet Container Manager (base PostgreSQL, recommandé) |
+| `docker-compose.sqlite.yml` | Variante avec une base SQLite, pour une seule personne qui saisit (voir [Choix de la base de données](#choix-de-la-base-de-données)) |
 | `.env.example` | Modèle des réglages, à copier en `.env` |
 
 Le dépôt contient aussi de quoi construire l'image (`Dockerfile`, `requirements.lock`, `docker/`) et des outils de maintenance (`scripts/`). Ils ne servent pas sur le NAS.
@@ -62,7 +65,7 @@ Le dépôt contient aussi de quoi construire l'image (`Dockerfile`, `requirement
 
 - DSM 7.2 ou plus récent, avec le paquet **Container Manager**.
 - Un NAS 64 bits : Intel/AMD (`x86_64`) ou ARM 64 bits (`aarch64`).
-- Environ 2 Go d'espace disque pour l'image et 300 Mo de mémoire vive. En test, l'application occupe environ 120 Mo au repos.
+- Environ 3 Go d'espace disque pour les images (Diacamma et PostgreSQL) et 300 Mo de mémoire vive. En test, au repos, l'application occupe environ 120 Mo et la base environ 30 Mo.
 - Un accès Internet depuis le NAS vers `ghcr.io`, pour télécharger l'image. Sans lui, voir [Construire l'image soi-même](#construire-limage-soi-même).
 - Pour un accès hors du réseau local : un nom de domaine pointant vers votre box (par exemple `syndic.mondomaine.fr`).
 - Un accès SSH au NAS est utile pour l'administration, mais pas obligatoire.
@@ -73,10 +76,10 @@ Le dépôt contient aussi de quoi construire l'image (`Dockerfile`, `requirement
 
 1. Téléchargez le kit `diacamma-syndic-<version>.zip` depuis la page de la [dernière version](https://github.com/jegweb/diacamma-syndic-synology/releases/latest), rubrique **Assets**.
 2. Dans **File Station**, créez le dossier `docker/diacamma-syndic` (le dossier partagé `docker` est créé par Container Manager).
-3. Déposez-y le fichier `.zip`, puis faites un clic droit dessus → **Extraire** → **Extraire ici**. Vous obtenez `docker-compose.yml`, `docker-compose.postgresql.yml` et `.env.example`. Le `.zip` peut ensuite être supprimé.
-4. Créez-y deux dossiers vides : `data` et `backups`.
+3. Déposez-y le fichier `.zip`, puis faites un clic droit dessus → **Extraire** → **Extraire ici**. Vous obtenez `docker-compose.yml`, `docker-compose.sqlite.yml` et `.env.example`. Le `.zip` peut ensuite être supprimé.
+4. Créez-y quatre dossiers vides : `data`, `backups`, `postgresql` et `secrets`. Pour la variante SQLite, voir [Variante SQLite](#variante-sqlite).
 
-> Créez `data` et `backups` vous-même avec File Station. S'ils sont créés automatiquement par Docker, ils appartiennent à `root` et l'application ne peut pas y écrire (voir [Permissions](#permissions-puidpgid)).
+> Créez ces dossiers vous-même avec File Station. S'ils sont créés automatiquement par Docker, ils appartiennent à `root` et les conteneurs ne peuvent pas y écrire (voir [Permissions](#permissions-puidpgid)).
 
 ### 2. Renseigner les réglages
 
@@ -89,7 +92,7 @@ PGID=100
 ```
 
 - `DIACAMMA_ALLOWED_HOSTS` : le ou les noms de domaine utilisés pour accéder à Diacamma. S'il manque, le site répond « 400 Bad Request ». Le premier nom qui n'est pas une adresse IP sert aussi d'adresse du site dans les liens des courriels (`https://<nom>`).
-- `PUID` et `PGID` : l'utilisateur et le groupe DSM propriétaires des dossiers `data` et `backups` (voir [Permissions](#permissions-puidpgid)).
+- `PUID` et `PGID` : l'utilisateur et le groupe DSM propriétaires des dossiers du projet (voir [Permissions](#permissions-puidpgid)).
 
 Les autres réglages (heure et durée de conservation des sauvegardes, mot de passe initial…) sont décrits dans `.env.example`.
 
@@ -99,7 +102,7 @@ Les autres réglages (heure et durée de conservation des sauvegardes, mot de pa
 2. Nom du projet : `diacamma-syndic`. Chemin : `/docker/diacamma-syndic`.
 3. Source : **utiliser le fichier `docker-compose.yml` existant**.
 4. Cochez **Configurer le portail Web via Web Station**. Les valeurs à saisir sont détaillées dans [Accès en HTTPS](#accès-en-https).
-5. Validez. Container Manager télécharge l'image (quelques centaines de Mo ; la bonne architecture est choisie automatiquement), puis démarre les deux conteneurs.
+5. Validez. Container Manager télécharge les images (quelques centaines de Mo chacune ; la bonne architecture est choisie automatiquement), puis démarre les trois conteneurs.
 
 La première initialisation (création de la base) prend une à quelques minutes. Le conteneur `diacamma-syndic` passe ensuite à l'état « sain » (*healthy*).
 
@@ -219,11 +222,11 @@ Pour une adresse de site différente, par exemple avec un port non standard, fix
 
 - **Chaque nuit** (à 02:30 par défaut, réglable avec `BACKUP_TIME`), le service de sauvegarde crée `backups/auto_syndic_AAAAMMJJ-HHMMSS.lbk`. Cette archive Diacamma complète contient la base et les documents. Les archives automatiques de plus de `BACKUP_KEEP_DAYS` jours (30 par défaut) sont supprimées.
 - **Depuis l'interface** de Diacamma (menu d'administration, archives), un administrateur peut créer, télécharger, importer et restaurer des archives. Elles sont rangées dans le même dossier `backups/`.
-- **Avant chaque mise à jour** (base SQLite), un instantané de sécurité est créé automatiquement dans `backups/avant-mise-a-jour/`.
+- **Avant chaque mise à jour**, avec la variante SQLite seulement, un instantané de sécurité est créé automatiquement dans `backups/avant-mise-a-jour/`.
 
 ### Copie hors du NAS
 
-Ces sauvegardes restent sur le NAS. Ajoutez le dossier `docker/diacamma-syndic` à une tâche **Hyper Backup** vers un autre support (disque USB, autre NAS, cloud). Le dossier `backups/` est le plus important : les archives `.lbk` sont cohérentes, alors qu'une copie de `data/` prise pendant une écriture peut ne pas l'être.
+Ces sauvegardes restent sur le NAS. Ajoutez le dossier `docker/diacamma-syndic` à une tâche **Hyper Backup** vers un autre support (disque USB, autre NAS, cloud). Le dossier `backups/` est le plus important : les archives `.lbk` sont cohérentes, alors qu'une copie de `data/` ou de `postgresql/` prise pendant une écriture peut ne pas l'être. Une archive `.lbk` contient toutes les données et les documents, mais pas le mot de passe de la base : elle se restaure dans n'importe quelle installation neuve, PostgreSQL ou SQLite, sans lui.
 
 ### Restaurer
 
@@ -235,17 +238,21 @@ Ces sauvegardes restent sur le NAS. Ajoutez le dossier `docker/diacamma-syndic` 
   sudo docker restart diacamma-syndic
   ```
 
-- **Instantané d'avant mise à jour** (`.tar.gz`, base SQLite uniquement) : arrêtez le projet, renommez `data/syndic` en `data/syndic.casse`, extrayez l'archive dans `data/`, remettez dans `docker-compose.yml` la version précédente de l'image (ligne `image:`), puis **Nettoyer** et **Créer** le projet.
+- **Instantané d'avant mise à jour** (`.tar.gz`, variante SQLite uniquement) : arrêtez le projet, renommez `data/syndic` en `data/syndic.casse`, extrayez l'archive dans `data/`, remettez dans `docker-compose.yml` la version précédente de l'image (ligne `image:`), puis **Nettoyer** et **Créer** le projet.
 
 ## Mise à jour
 
 Les versions s'écrivent `X.Y.Z-N` : `X.Y.Z` est la version de Diacamma, `N` la révision de l'empaquetage. Une révision peut seulement apporter les correctifs de sécurité de Debian et de Python : installez-les aussi. Pour être prévenu, cliquez sur **Watch** → **Custom** → **Releases** en haut de la page GitHub du projet.
 
 1. Faites une sauvegarde : depuis l'interface, ou `sudo docker exec diacamma-syndic diacamma backup`.
-2. Lisez les notes de la nouvelle version, puis remplacez `docker-compose.yml` sur le NAS par celui du nouveau kit. Si vous aviez modifié la ligne `ports` (option B), refaites la modification. Une autre façon de faire : dans votre fichier, changez seulement le numéro de version à la fin de la ligne `image:`. **Ne touchez pas à `data/`, `backups/` ni `.env`.**
+2. Lisez les notes de la nouvelle version, puis remplacez `docker-compose.yml` sur le NAS par le fichier du nouveau kit qui correspond à votre base :
+   - le dossier du projet contient un dossier `postgresql` : prenez `docker-compose.yml` ;
+   - sinon, votre installation utilise SQLite : prenez `docker-compose.sqlite.yml` et renommez-le en `docker-compose.yml`.
+
+   Attention : **Extraire ici** écrase votre `docker-compose.yml` par celui du kit, qui est la version PostgreSQL. En cas d'erreur de fichier, le conteneur refuse de démarrer, sans toucher aux données, et son journal indique le bon fichier. Si vous aviez modifié la ligne `ports` (option B), refaites la modification. Une autre façon de faire : dans votre fichier, changez seulement le numéro de version à la fin de la ligne `image:`. **Ne touchez pas à `data/`, `backups/`, `postgresql/`, `secrets/` ni `.env`.**
 3. Dans **Container Manager** → **Projet**, sélectionnez le projet, puis choisissez successivement :
    - **Arrêter** ;
-   - **Nettoyer** : les conteneurs sont supprimés, mais les données de `data/` et `backups/` ne sont pas touchées ;
+   - **Nettoyer** : les conteneurs sont supprimés, mais les dossiers de données du projet ne sont pas touchés ;
    - **Créer** : Container Manager relit le compose et `.env`, télécharge la nouvelle image et recrée les conteneurs.
 
    « Démarrer » ne suffit pas : il relance les conteneurs existants avec l'ancienne configuration. En SSH, depuis `/volume1/docker/diacamma-syndic` :
@@ -254,8 +261,17 @@ Les versions s'écrivent `X.Y.Z-N` : `X.Y.Z` est la version de Diacamma, `N` la 
    sudo docker compose pull && sudo docker compose up -d
    ```
 
-4. Au démarrage, le conteneur détecte la nouvelle version. Il prend un instantané (SQLite), applique les migrations de la base, puis régénère les fichiers statiques. Suivez l'opération dans le journal.
+4. Au démarrage, le conteneur détecte la nouvelle version. Avec SQLite, il prend d'abord un instantané. Il applique ensuite les migrations de la base, puis régénère les fichiers statiques. Suivez l'opération dans le journal.
 5. Supprimez l'ancienne image : **Container Manager** → **Image** → sélectionner l'image inutilisée → **Supprimer**.
+
+### Installations d'avant la version 2.7.10-3
+
+Jusqu'à la version 2.7.10-2, `docker-compose.yml` utilisait SQLite. Si votre projet n'a pas de dossier `postgresql`, votre installation est en SQLite. Deux possibilités :
+
+- garder SQLite : à chaque mise à jour, prenez `docker-compose.sqlite.yml` et renommez-le en `docker-compose.yml` ;
+- passer à PostgreSQL, recommandé si plusieurs personnes saisissent : voir [Changer de base de données](#changer-de-base-de-données).
+
+Les installations qui utilisaient déjà `docker-compose.postgresql.yml` prennent désormais `docker-compose.yml`. Leur fichier `secrets/db_password.txt` est conservé tel quel.
 
 ### Passer d'une image construite sur le NAS à l'image publiée
 
@@ -280,39 +296,67 @@ En SSH, préfixez chaque commande par `sudo docker exec -it diacamma-syndic`, pa
 | `diacamma manage <args>` | Lance une commande Django `manage.py` sur l'instance |
 | `diacamma admin <args>` | Lance une commande `lucterios_admin` (usage avancé). `check` et `update` ne fonctionnent pas : les mises à jour passent par une nouvelle image. |
 
-## Variante PostgreSQL
+## Choix de la base de données
 
-SQLite est la base par défaut des installations de bureau de Diacamma et convient à l'usage d'une copropriété. PostgreSQL est l'option retenue par le paquet YunoHost de Diacamma. Si vous la préférez :
+Le kit propose deux variantes. L'image et les fonctions de Diacamma sont les mêmes.
 
-1. Avant la première installation, remplacez `docker-compose.yml` par `docker-compose.postgresql.yml` (renommez-le en `docker-compose.yml`).
-2. Créez les dossiers `postgresql` et `secrets` à côté de `data`.
-3. Créez `secrets/db_password.txt` avec un mot de passe d'au moins 12 caractères (lettres, chiffres et `. _ ~ + -`), sur une seule ligne.
-4. Créez le projet comme décrit plus haut.
+| | PostgreSQL (`docker-compose.yml`, recommandé) | SQLite (`docker-compose.sqlite.yml`) |
+| --- | --- | --- |
+| Saisies simultanées | Plusieurs personnes peuvent enregistrer en même temps | Une seule à la fois : une seconde saisie simultanée peut échouer |
+| Conteneurs | Trois : la base a le sien | Deux : la base est un fichier dans `data/` |
+| Dossiers à créer | `data`, `backups`, `postgresql`, `secrets` | `data`, `backups` |
+| Avant une mise à jour | Sauvegarde à faire soi-même | Instantané automatique, en plus de la sauvegarde |
 
-La base n'est joignable que par Diacamma, sur un réseau Docker interne sans accès extérieur, et le mot de passe n'apparaît pas dans le fichier Compose. Il n'y a pas d'instantané automatique avant mise à jour avec PostgreSQL : faites toujours une sauvegarde au préalable.
+**Pourquoi PostgreSQL par défaut.** Diacamma est une application web : le syndic, le conseil syndical et les copropriétaires peuvent s'y connecter en même temps. Lucterios traite chaque requête dans une transaction. Avec SQLite, une écriture verrouille toute la base. Si deux personnes enregistrent en même temps, ou pendant une opération longue (clôture d'exercice, appels de fonds, envoi de courriels par lots, sauvegarde), l'une d'elles peut recevoir l'erreur « database is locked ». Sa saisie est alors perdue, mais pas les données déjà enregistrées. PostgreSQL ne verrouille que les lignes modifiées. C'est aussi la base retenue par le paquet YunoHost de Diacamma, maintenu par son auteur.
+
+**Quand SQLite suffit.** Une seule personne saisit à la fois, par exemple un syndic bénévole seul, les copropriétaires se contentant de consulter. SQLite est la base des installations de bureau de Diacamma.
+
+**Pourquoi pas MariaDB ou MySQL.** Lucterios sait les utiliser, mais leurs changements de structure ne sont pas transactionnels : une mise à jour interrompue laisserait la base à moitié migrée, alors qu'avec PostgreSQL une migration qui échoue est annulée. Leurs comparaisons de texte ignorent aussi, par défaut, la casse et les accents. Le paquet MariaDB de Synology n'est pas utilisé : la base reste dans le projet, isolée.
+
+### Mot de passe de la base PostgreSQL
+
+Au premier démarrage, le conteneur `diacamma-syndic-db` crée un mot de passe aléatoire dans `secrets/db_password.txt`. Il n'apparaît ni dans le compose ni dans `.env`.
+
+Vous n'avez pas à le connaître ni à le noter. Il ne sert qu'entre Diacamma et sa base, jamais pour se connecter à Diacamma, et les archives `.lbk` n'en ont pas besoin. Laissez simplement le fichier en place : s'il disparaît, la base refuse de démarrer. Diacamma en garde une copie dans `data/syndic/settings.py`, qui permet de le recréer (voir [Dépannage](#dépannage)).
+
+La base n'est joignable que par Diacamma, sur un réseau Docker interne sans accès extérieur.
+
+### Variante SQLite
+
+1. Avant la première installation, supprimez `docker-compose.yml`, puis renommez `docker-compose.sqlite.yml` en `docker-compose.yml`.
+2. Créez seulement les dossiers `data` et `backups`.
+3. Créez le projet comme décrit dans [Installation](#installation).
 
 ### Changer de base de données
 
-Le moteur de base d'une instance existante ne peut pas être changé en modifiant la configuration : le conteneur refuse de démarrer. Pour passer de SQLite à PostgreSQL ou l'inverse :
+Le moteur de base d'une instance existante ne peut pas être changé en modifiant la configuration : le conteneur refuse de démarrer, sans toucher aux données. Pour passer de SQLite à PostgreSQL :
 
-1. Créez une archive `.lbk`.
-2. Installez un nouveau projet avec l'autre variante, dans un dossier `data` vide.
-3. Restaurez l'archive dans le nouveau projet.
+1. Créez une archive, depuis l'interface ou en SSH : `sudo docker exec diacamma-syndic diacamma backup`. Elle est rangée dans `backups/`.
+2. Dans Container Manager, sélectionnez le projet : **Arrêter**, puis **Nettoyer**.
+3. Dans File Station, renommez `data` en `data.sqlite`. Gardez-le jusqu'à ce que tout fonctionne.
+4. Créez les dossiers vides `data`, `postgresql` et `secrets`. Si `postgresql` ou `secrets` existent déjà, créés par Docker après une erreur de fichier, supprimez-les d'abord.
+5. Remplacez `docker-compose.yml` par celui du kit, la version PostgreSQL. Gardez `.env` et `backups/`.
+6. **Créez** le projet. Une instance vide est créée, avec un nouveau mot de passe `admin` (voir le journal). Attendez que `diacamma-syndic` soit « sain ».
+7. Restaurez l'archive, depuis l'interface (menu des archives) ou en SSH : `sudo docker exec diacamma-syndic diacamma restore <archive>.lbk`. Redémarrez ensuite le conteneur `diacamma-syndic`.
+8. Vérifiez vos données. Les comptes et leurs mots de passe sont ceux de l'archive.
 
-Procédez de la même façon pour changer de version majeure de PostgreSQL.
+Pour revenir en arrière : **Arrêter**, **Nettoyer**, supprimez `data`, `postgresql` et `secrets`, renommez `data.sqlite` en `data`, remettez `docker-compose.sqlite.yml` renommé en `docker-compose.yml`, puis **Créer**.
+
+Le passage de PostgreSQL à SQLite suit les mêmes étapes, avec la variante SQLite. Un changement de version majeure de PostgreSQL aussi, avec un dossier `postgresql` vide.
 
 ## Permissions (PUID/PGID)
 
-Les conteneurs tournent sans privilèges, sous l'utilisateur `PUID:PGID` (par défaut `1026:100`, le premier compte créé sur DSM et le groupe `users`). Cet utilisateur doit pouvoir écrire dans `data` et `backups`.
+Les conteneurs tournent sans privilèges, sous l'utilisateur `PUID:PGID` (par défaut `1026:100`, le premier compte créé sur DSM et le groupe `users`). Cet utilisateur doit pouvoir écrire dans `data`, `backups`, `postgresql` et `secrets`.
 
 - Pour connaître l'identifiant d'un compte, en SSH : `id nom_du_compte`. Reportez `uid` dans `PUID` et `gid` dans `PGID`.
 - Si les droits ne conviennent pas, le conteneur s'arrête avec un message explicite dans son journal : `le dossier /data (propriétaire …) n'est pas accessible en écriture…`. Il indique le propriétaire actuel du dossier et la commande de correction. Le cas le plus courant est un dossier créé automatiquement par Docker, qui appartient alors à `root` (`0:0`). Pour corriger, en SSH, depuis le dossier du projet :
 
   ```sh
-  sudo chown -R 1026:100 data backups
+  sudo chown -R 1026:100 data backups postgresql secrets
   ```
 
   Remplacez `1026:100` par vos `PUID:PGID`. Redémarrez ensuite le projet.
+- Pour la base PostgreSQL, le message est dans le journal de `diacamma-syndic-db` : `[diacamma-db] ERREUR : impossible d'écrire dans le dossier secrets…`, ou `Permission denied` sur `/var/lib/postgresql/data`. La correction est la même.
 - Les fichiers créés par l'application ne sont lisibles que par leur propriétaire : `settings.py` contient la clé secrète de l'instance.
 
 ## Construire l'image soi-même
@@ -324,7 +368,7 @@ Utile si le NAS n'a pas accès à `ghcr.io`, ou pour tester une image modifiée.
 3. Dans `docker-compose.yml` sur le NAS, décommentez la ligne `# pull_policy: never` (retirez le `#`). Sans cela, Container Manager essaie de télécharger l'image et remplace la vôtre, ou échoue s'il n'a pas accès à Internet.
 4. Créez le projet comme d'habitude. S'il existe déjà : **Arrêter**, **Nettoyer**, puis **Créer**.
 
-Avec un accès SSH, vous pouvez aussi construire directement sur le NAS, depuis une copie du dépôt. Le nom de l'image doit être celui de la ligne `image:` du compose, par exemple : `sudo docker build -t ghcr.io/jegweb/diacamma-syndic:2.7.10-2 .`
+Avec un accès SSH, vous pouvez aussi construire directement sur le NAS, depuis une copie du dépôt. Le nom de l'image doit être celui de la ligne `image:` du compose, par exemple : `sudo docker build -t ghcr.io/jegweb/diacamma-syndic:2.7.10-3 .`
 
 ## Dépannage
 
@@ -340,8 +384,12 @@ Un démarrage normal se termine par `[diacamma] Démarrage de Diacamma Syndic (�
 | --- | --- |
 | « 400 Bad Request » | Le nom de domaine utilisé n'est pas dans `DIACAMMA_ALLOWED_HOSTS`. Avec l'option B, la box a peut-être réécrit l'en-tête `Host` : ajoutez l'IP du NAS. Corrigez `.env`, puis recréez le projet (**Arrêter**, **Nettoyer**, puis **Créer**) : un simple redémarrage ne relit pas `.env`. |
 | La connexion échoue sans message en HTTP | Avec `DIACAMMA_HTTPS=true`, le cookie de session n'est envoyé qu'en HTTPS. Passez par le proxy inverse ou, pour un essai, mettez `DIACAMMA_HTTPS=false`. |
-| « Build project … failed » avec « container diacamma-syndic is unhealthy » | Le conteneur `diacamma-syndic` s'arrête au démarrage. Ce message venait d'une ancienne version de `docker-compose.yml` : avec la version actuelle, le projet est créé et le conteneur apparaît « en redémarrage ». La cause est dans **son** journal (Container Manager → Conteneur → `diacamma-syndic` → Journal), sur les lignes `[diacamma] ERREUR`. Si le conteneur n'apparaît pas, lancez-le au premier plan en SSH, depuis le dossier du projet : `sudo docker compose up diacamma` (Ctrl+C pour arrêter). Le plus souvent, ce sont les droits sur `data/` ou `backups/` (voir [Permissions](#permissions-puidpgid)). |
+| « Build project … failed » avec « container diacamma-syndic is unhealthy » (ou `diacamma-syndic-db`) | Le conteneur `diacamma-syndic` s'arrête au démarrage. Ce message venait d'une ancienne version de `docker-compose.yml` : avec la version actuelle, le projet est créé et le conteneur apparaît « en redémarrage ». La cause est dans **son** journal (Container Manager → Conteneur → `diacamma-syndic` → Journal), sur les lignes `[diacamma] ERREUR`. Si le conteneur n'apparaît pas, lancez-le au premier plan en SSH, depuis le dossier du projet : `sudo docker compose up diacamma` (Ctrl+C pour arrêter). Le plus souvent, ce sont les droits sur les dossiers du projet (voir [Permissions](#permissions-puidpgid)). |
 | Le conteneur redémarre en boucle | Lisez son journal. Le message commence par `[diacamma] ERREUR`. |
+| « l'instance existante utilise SQLite, mais ce docker-compose.yml est celui de PostgreSQL » | Votre installation est en SQLite et le `docker-compose.yml` du kit a remplacé le vôtre. Prenez `docker-compose.sqlite.yml`, renommez-le en `docker-compose.yml`, puis **Nettoyer** et **Créer**. Supprimez les dossiers `postgresql` et `secrets` s'ils ont été créés. Pour passer à PostgreSQL, voir [Changer de base de données](#changer-de-base-de-données). |
+| « En attente de la base PostgreSQL » qui se répète, puis « la base PostgreSQL … ne répond pas » | Lisez le journal de `diacamma-syndic-db`. Le plus souvent, `postgresql` ou `secrets` ont été créés par Docker et appartiennent à `root` (voir [Permissions](#permissions-puidpgid)). |
+| « [diacamma-db] ERREUR : la base existe déjà dans postgresql/, mais secrets/db_password.txt manque » | Le fichier a été supprimé. Recréez-le à partir de la copie gardée par Diacamma. En SSH, depuis le dossier du projet : `sudo grep -o '"PASSWORD": "[^"]*' data/syndic/settings.py \| cut -d'"' -f4 \| sudo tee secrets/db_password.txt >/dev/null`, puis `sudo chown 1026:100 secrets/db_password.txt && sudo chmod 600 secrets/db_password.txt` (vos `PUID:PGID`). Redémarrez ensuite le projet. |
+| « PostgreSQL refuse le mot de passe de secrets/db_password.txt » | Le fichier a été remplacé ou modifié après la création de la base. Recréez-le comme dans la ligne précédente. |
 | « relation "CORE_parameter" does not exist » dans le journal PostgreSQL au premier démarrage | Sans conséquence : Lucterios interroge ses paramètres avant de créer les tables. |
 | « SyntaxWarning: invalid escape sequence » ou « Your models in app(s): … have changes that are not yet reflected in a migration » à chaque démarrage | Sans conséquence : ces messages viennent du code de Diacamma et Lucterios eux-mêmes. Ne lancez pas `makemigrations`. |
 | « pull access denied » ou « denied » | Si le message cite `diacamma-syndic` sans `ghcr.io`, votre `docker-compose.yml` vient d'une ancienne version, qui construisait l'image sur le NAS : remplacez-le par celui du kit (voir [Mise à jour](#mise-à-jour)). S'il cite `ghcr.io/jegweb/diacamma-syndic`, l'image n'est pas accessible publiquement : signalez-le dans un ticket. |
@@ -355,6 +403,7 @@ Un démarrage normal se termine par `[diacamma] Démarrage de Diacamma Syndic (�
 Ce que fait le projet :
 
 - Le compte `admin`/`admin` est remplacé dès le premier démarrage par un mot de passe aléatoire ou par celui fourni.
+- La base PostgreSQL n'est joignable que par Diacamma, sur un réseau Docker interne. Son mot de passe est aléatoire, créé au premier démarrage, et n'apparaît ni dans le compose ni dans `.env`.
 - Le mode débogage de Django est désactivé, alors que c'est le réglage par défaut de Lucterios.
 - Les noms d'hôte autorisés sont contrôlés, et le cookie de session est marqué `Secure`, `HttpOnly` et `SameSite=Lax`.
 - L'application n'est exposée que sur `127.0.0.1`, derrière le proxy inverse HTTPS de DSM (option A, réglage par défaut).

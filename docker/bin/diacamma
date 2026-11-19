@@ -101,8 +101,16 @@ instance_engine() {
   fi
 }
 
+# PostgreSQL démarre en parallèle (le compose n'attend pas son état « healthy »).
+wait_database() {
+  [[ "$(db_engine)" == postgresql ]] || return 0
+  helper wait-postgresql
+}
+
 create_instance() {
   local extra="$1" database
+  # D'abord l'attente : le mot de passe est créé par le conteneur de la base.
+  wait_database
   # Affectation séparée : un échec de database_arg arrête le script (set -e).
   database="$(database_arg)"
   [[ ! -e "$DATA_DIR/manage_$INSTANCE.py" ]] \
@@ -114,8 +122,14 @@ create_instance() {
 update_instance() {
   local extra="$1" engine previous snapshot
   engine="$(instance_engine)"
-  [[ "$engine" == "$(db_engine)" ]] \
-    || die "l'instance existante utilise la base « $engine » mais DIACAMMA_DB_ENGINE vaut « $(db_engine) ». Pour changer de base, passez par une archive (README, « Changer de base de données »)."
+  if [[ "$engine" != "$(db_engine)" ]]; then
+    case "$engine:$(db_engine)" in
+      sqlite:postgresql) die "l'instance existante utilise SQLite, mais ce docker-compose.yml est celui de PostgreSQL. Pour garder SQLite : prenez docker-compose.sqlite.yml dans le kit et renommez-le en docker-compose.yml. Pour passer à PostgreSQL : README, « Changer de base de données ». Vos données n'ont pas été modifiées." ;;
+      postgresql:sqlite) die "l'instance existante utilise PostgreSQL, mais ce docker-compose.yml est celui de SQLite : reprenez docker-compose.yml dans le kit. Vos données n'ont pas été modifiées." ;;
+      *) die "l'instance existante utilise la base « $engine » mais DIACAMMA_DB_ENGINE vaut « $(db_engine) ». Pour changer de base, passez par une archive (README, « Changer de base de données »)." ;;
+    esac
+  fi
+  wait_database
   previous="$(cat "$BUILD_MARKER" 2>/dev/null || true)"
   if [[ -z "$previous" ]]; then
     # Aucun démarrage réussi encore (tentatives interrompues) ou données importées.

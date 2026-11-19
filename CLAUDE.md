@@ -13,18 +13,19 @@ L'utilisateur travaille en français : réponses, commentaires, messages du cont
 ```sh
 docker build -t diacamma-syndic:local .                     # construire l'image (arch locale)
 docker build --platform linux/amd64 -t diacamma-syndic:amd64-test .   # vérifier l'autre architecture
-scripts/smoke-test.sh diacamma-syndic:local                 # test de fumée (ajouter --postgresql pour l'autre variante)
+scripts/smoke-test.sh diacamma-syndic:local                 # test de fumée PostgreSQL (ajouter --sqlite pour l'autre variante)
 scripts/smoke-test.sh --depuis ghcr.io/jegweb/diacamma-syndic:latest diacamma-syndic:local   # test de mise à jour
 scripts/update-lock.sh                                      # régénérer requirements.lock depuis requirements.in
 scripts/build-image.sh amd64                                # image exportée en dist/*.tar pour import dans Container Manager
 docker run --rm -v "$PWD:/mnt:ro" koalaman/shellcheck:stable docker/bin/diacamma scripts/*.sh   # lint shell
 ```
 
-Il n'y a pas de suite de tests unitaires. `scripts/smoke-test.sh [--postgresql] <image>` lance le projet dans un dossier jetable, en dehors du dépôt pour ne pas y créer `data/` et `backups/`. Il remplace la ligne `image:` du compose par l'image locale indiquée, puis vérifie :
+Il n'y a pas de suite de tests unitaires. `scripts/smoke-test.sh [--sqlite] [--depuis <image>] <image>` lance le projet dans un dossier jetable, en dehors du dépôt pour ne pas y créer `data/` et `backups/`. Il remplace la ligne `image:` du compose par l'image locale indiquée, puis vérifie :
 
 - la connexion avec le mot de passe fourni, et le refus de `admin`/`admin` ;
 - `/static/settings.py` et `/static/db.sqlite3` en 404, un hôte inconnu en 400 ;
-- `backup`, puis `restore` suivi d'un redémarrage.
+- `backup`, puis `restore` suivi d'un redémarrage ;
+- en PostgreSQL, le mot de passe généré dans `secrets/` ; avec `--sqlite`, le refus du compose PostgreSQL sur une instance SQLite, base intacte.
 
 La CI (`.github/workflows/ci.yml`) le lance sur chaque push et chaque pull request, et chaque mois sans cache. Pour un essai manuel, la connexion se teste ainsi :
 
@@ -47,7 +48,7 @@ L'image est publiée sur `ghcr.io/jegweb/diacamma-syndic`. Versions `X.Y.Z-N` : 
 
 - Le tag d'image est écrit en dur dans **les deux** compose.
 - **Plafonds prudents** (`requirements.in`) : une dépendance indirecte que l'amont ne limite pas, et dont une version majeure est sortie après la version amont de Diacamma, est plafonnée sous cette majeure. Les règles complètes sont dans CONTRIBUTING, étape 1. Le Dockerfile lance `pip check` : seule l'absence de PyQt6 est tolérée.
-- Test de mise à jour : `smoke-test.sh --depuis <image publiée>`. La CI (variante `mise-a-jour`) et la publication le lancent depuis `:latest`.
+- Test de mise à jour : `smoke-test.sh [--sqlite] --depuis <image publiée>`. La CI (variantes `mise-a-jour` et `mise-a-jour-sqlite`) et la publication le lancent depuis `:latest`, pour les deux bases.
 - `scan.yml` : analyse Trivy hebdomadaire de `:latest`, avec une version de Trivy épinglée à la main. Seuil : HIGH/CRITICAL, failles corrigées seulement. La réponse attendue à un échec est une révision `-N+1` (procédure dans CONTRIBUTING).
 - Une étiquette Git `vX.Y.Z-N` (ou `-rcM`) lance `.github/workflows/release.yml`. Il vérifie la cohérence (étiquette, compose, `requirements.lock`, entrée `## [X.Y.Z-N]` du CHANGELOG), puis construit et teste sur des runners natifs amd64 et arm64.
 - Il pousse l'image testée sous `X.Y.Z-N-<arch>`, assemble le manifeste multi-architecture (`X.Y.Z-N`, puis `X.Y.Z` et `latest` hors pré-version) et crée la Release avec le kit `.zip` (deux compose et `.env.example`).
@@ -60,7 +61,7 @@ L'image est publiée sur `ghcr.io/jegweb/diacamma-syndic`. Versions `X.Y.Z-N` : 
 - `Dockerfile` : construction en deux étapes sur `python:3.13-slim-trixie`. Trixie est obligatoire : les roues aarch64 exigent glibc ≥ 2.39. Le verrou est installé avec `pip install --no-deps -r requirements.lock`. **PyQt6 est volontairement exclu** du verrou : c'est une dépendance déclarée de `lucterios`, mais elle ne sert qu'à l'interface de bureau. Exécution sous l'UID:GID 1026:100, avec `tini` comme PID 1. L'étape finale lance `apt-get upgrade` et **retire pip**, du venv comme du Python système. pip ne sert qu'à `lucterios_admin check/update`, et ses bibliothèques embarquées étaient signalées par Trivy. L'interface n'appelle `lucterios_admin` que pour `archive` et `restore`.
 - `docker/bin/diacamma` : point d'entrée et outil d'administration (`serve`, `backup`, `backup-daemon`, `restore`, `reset-admin-password`, `version`, `manage`, `admin`). Il pilote `python -m lucterios.install.lucterios_admin … -i /data`.
 - `docker/lib/diacamma_docker.py` : fonctions Python appelées par le script (`extra-settings`, `secure-admin`, `clean-static`, `snapshot-sqlite`). `diacamma_wsgi.py` enveloppe l'application Lucterios avec WhiteNoise. `healthcheck.py` est la sonde de santé.
-- `docker-compose.yml` (SQLite) et `docker-compose.postgresql.yml` : deux services avec la même image, téléchargée depuis ghcr.io. `diacamma` sert l'application ; `sauvegarde` lance `backup-daemon`. Durcissement : `read_only`, `cap_drop: ALL`, `no-new-privileges`, port publié sur `127.0.0.1`. Toute la configuration passe par `.env` (voir `.env.example`).
+- `docker-compose.yml` (PostgreSQL, recommandé depuis 2.7.10-3) et `docker-compose.sqlite.yml` : deux services avec la même image, téléchargée depuis ghcr.io, plus `db` (`postgres:17`, réseau `backend` interne) pour PostgreSQL. `diacamma` sert l'application ; `sauvegarde` lance `backup-daemon`. Jusqu'à 2.7.10-2, `docker-compose.yml` était la variante SQLite : les installations sans dossier `postgresql/` sont en SQLite. Le refus de démarrer sur un moteur différent (`update_instance`) protège celles qui prennent le mauvais fichier. Durcissement : `read_only`, `cap_drop: ALL`, `no-new-privileges`, port publié sur `127.0.0.1`. Toute la configuration passe par `.env` (voir `.env.example`).
 
 ### Contraintes propres à Synology (constatées sur un NAS Synology, noyau 4.4)
 
@@ -69,7 +70,8 @@ L'image est publiée sur `ghcr.io/jegweb/diacamma-syndic`. Versions `X.Y.Z-N` : 
 - **Pas de `pids_limit`** : le noyau ne gère pas cette limite (avertissement « PIDs limit discarded »).
 - **Vocabulaire de l'interface française** : l'action « Build » d'un projet s'appelle **« Créer »**. Pour qu'un changement du compose ou de `.env` soit pris en compte, la documentation demande **Arrêter → Nettoyer → Créer**. « Démarrer » relance les conteneurs existants sans relire le compose. « Nettoyer » supprime les conteneurs, mais ni les images ni les dossiers de données.
 - **Container Manager lance `docker compose pull` avant `up`.** L'image du compose doit donc exister sur ghcr.io, dans un paquet public. Pour une image importée ou construite sur le NAS, l'utilisateur décommente `pull_policy: never` dans l'ancre `x-diacamma` ; sinon le pull échoue ou remplace l'image. Ne pas remettre de section `build:` : le kit ne contient pas le Dockerfile.
-- **`sauvegarde` dépend de `diacamma` en `service_started`, pas `service_healthy`.** Container Manager affiche tout échec de `compose up` comme « Build project failed », sans garder de conteneur dont on puisse lire le journal. Les erreurs de démarrage doivent laisser le conteneur visible, en redémarrage, avec un message `[diacamma] ERREUR` explicite.
+- **Dépendances en `service_started`, jamais `service_healthy`** : `sauvegarde` envers `diacamma`, `diacamma` envers `db`. Container Manager affiche tout échec de `compose up` comme « Build project failed », sans garder de conteneur dont on puisse lire le journal. Les erreurs de démarrage doivent laisser le conteneur visible, en redémarrage, avec un message `[diacamma] ERREUR` explicite. Diacamma attend donc PostgreSQL lui-même (`wait-postgresql`, 300 s au plus), après la vérification du moteur.
+- **File Station ne crée pas de fichier texte.** Le mot de passe PostgreSQL est généré par l'`entrypoint` de `db` dans `secrets/db_password.txt` (dossier monté en lecture seule dans Diacamma), seulement si la base n'existe pas encore. Les `$` du script sont doublés (`$$`) dans le compose.
 
 ### Séquence `serve`
 
