@@ -4,7 +4,7 @@ Merci de votre intérêt ! Le projet est en français : tickets, commentaires du
 
 - **Une question, un retour d'installation** : les [Discussions](https://github.com/jegweb/diacamma-syndic-synology/discussions).
 - **Un problème du conteneur ou de la documentation** : un ticket. Joignez le journal et masquez votre domaine et vos mots de passe.
-- **Un problème de l'application Diacamma** (comptabilité, appels de fonds, impressions…) : l'[équipe Diacamma](https://www.diacamma.org).
+- **Un problème de l'application Diacamma** (comptabilité, appels de fonds, impressions…) : le [forum Diacamma](https://forum.diacamma.org) pour une question, [les tickets de Diacamma](https://github.com/Diacamma2/syndic/issues) pour un bogue.
 - **Une faille de sécurité** : voir [SECURITY.md](SECURITY.md), jamais en ticket public.
 
 ## Avant de modifier

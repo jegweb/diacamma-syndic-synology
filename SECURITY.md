@@ -16,7 +16,7 @@ Le projet est maintenu bénévolement. Vous recevrez une réponse dès que possi
 - Les fichiers Compose : ports publiés, durcissement des conteneurs, gestion des secrets.
 - Les scripts et la documentation, par exemple une configuration recommandée qui serait dangereuse.
 
-Une faille de l'application Diacamma ou du framework Lucterios eux-mêmes doit être signalée à l'équipe Diacamma ([diacamma.org](https://www.diacamma.org)). Vous pouvez aussi la signaler ici : elle sera transmise, et le projet peut parfois l'atténuer dans le conteneur en attendant un correctif.
+Une faille de l'application Diacamma ou du framework Lucterios eux-mêmes doit être signalée en privé à l'équipe Diacamma, par courriel à `contribute@diacamma.org`, et jamais dans un ticket public. Vous pouvez aussi la signaler ici : elle sera transmise, et le projet peut parfois l'atténuer dans le conteneur en attendant un correctif.
 
 ## Versions suivies
 

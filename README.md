@@ -1,6 +1,6 @@
 # Diacamma Syndic sur NAS Synology (Container Manager)
 
-> **Projet communautaire non officiel**, sans lien avec l'équipe de Diacamma. Signalez ici les problèmes du conteneur et de l'installation, et à [Diacamma](https://www.diacamma.org) ceux de l'application elle-même.
+> **Projet communautaire non officiel**, sans lien avec l'équipe de Diacamma. Signalez ici les problèmes du conteneur et de l'installation, et ceux de l'application elle-même sur le [forum Diacamma](https://forum.diacamma.org).
 
 Ce projet fournit de quoi déployer [Diacamma Syndic](https://www.diacamma.org) (gestion de copropriété, logiciel libre GPL) dans **Container Manager** sur un NAS Synology : une image Docker prête à l'emploi (Intel/AMD et ARM 64 bits), un projet Compose et des sauvegardes automatiques. Toutes les fonctions de l'application sont conservées : comptabilité, appels de fonds, documents, courriels, impressions PDF, archives et restauration depuis l'interface.
 
@@ -375,6 +375,8 @@ Pour signaler une faille, voir [SECURITY.md](SECURITY.md) ; ne publiez pas de ti
 ## Contribuer, licence
 
 Les retours d'installation, questions et corrections sont les bienvenus : voir [CONTRIBUTING.md](CONTRIBUTING.md). Les questions vont dans les [Discussions](https://github.com/jegweb/diacamma-syndic-synology/discussions), les problèmes du conteneur dans les tickets.
+
+Pour l'application Diacamma elle-même, adressez-vous à l'équipe Diacamma : les questions d'utilisation sur son [forum](https://forum.diacamma.org), les bogues dans [ses tickets](https://github.com/Diacamma2/syndic/issues).
 
 Ce projet (Dockerfile, scripts, fichiers Compose, documentation) est distribué sous licence **GPL-3.0-or-later** : voir [LICENSE](LICENSE). Copyright (C) 2026 jegweb.
 
