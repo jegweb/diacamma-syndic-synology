@@ -51,6 +51,7 @@ L'image est publiée sur `ghcr.io/jegweb/diacamma-syndic`. Versions `X.Y.Z-N` : 
 - Une étiquette Git `vX.Y.Z-N` (ou `-rcM`) lance `.github/workflows/release.yml`. Il vérifie la cohérence (étiquette, compose, `requirements.lock`, entrée `## [X.Y.Z-N]` du CHANGELOG), puis construit et teste sur des runners natifs amd64 et arm64.
 - Il pousse l'image testée sous `X.Y.Z-N-<arch>`, assemble le manifeste multi-architecture (`X.Y.Z-N`, puis `X.Y.Z` et `latest` hors pré-version) et crée la Release avec le kit `.zip` (deux compose et `.env.example`).
 - Images sans attestation (`provenance`/`sbom` désactivés), pour le Docker 24 de Container Manager.
+- Une version définitive est annoncée par une discussion dans la catégorie `ANNONCES` (« Annonces »), seulement si cette catégorie existe. Le formulaire `.github/DISCUSSION_TEMPLATE/questions-et-aide.yml` doit porter le nom (slug) de la catégorie « Questions et aide ».
 - `ARG VERSION` donne `DIACAMMA_IMAGE_VERSION`, affiché par `diacamma version`. Elle n'entre pas dans `diacamma-build-id` : une révision sans changement de paquets ne déclenche pas de migration.
 
 ## Architecture

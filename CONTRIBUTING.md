@@ -59,7 +59,7 @@ Les versions s'écrivent `X.Y.Z-N` (voir [CHANGELOG.md](CHANGELOG.md)).
 3. Ajoutez l'entrée `## [X.Y.Z-N]` au CHANGELOG.
 4. Testez (voir plus haut), commitez, puis poussez une pré-version : `git tag vX.Y.Z-N-rc1 && git push origin vX.Y.Z-N-rc1`.
 5. Le workflow « Publication » vérifie la cohérence de l'étiquette, des compose, du verrou et du CHANGELOG. Il construit et teste l'image sur amd64 et arm64, la publie sur ghcr.io et crée une Release marquée comme pré-version. Testez le kit sur un NAS.
-6. Publiez la version définitive : `git tag vX.Y.Z-N && git push origin vX.Y.Z-N`. Les tags d'image `X.Y.Z-N`, `X.Y.Z` et `latest` sont publiés.
+6. Publiez la version définitive : `git tag vX.Y.Z-N && git push origin vX.Y.Z-N`. Les tags d'image `X.Y.Z-N`, `X.Y.Z` et `latest` sont publiés. La Release est aussi annoncée par une discussion dans la catégorie « Annonces ». Si vous renommez cette catégorie, mettez à jour la variable `ANNONCES` de `release.yml` ; sinon la Release est créée sans annonce, avec un avertissement.
 
 **Correctifs de sécurité.** L'intégration continue reconstruit l'image sans cache le 1er de chaque mois. Publiez une révision environ une fois par mois, ou plus vite après une faille annoncée dans Debian ou Python. GitHub suspend les tâches planifiées d'un dépôt public sans activité depuis 60 jours : relancez-les depuis l'onglet Actions si besoin.
 

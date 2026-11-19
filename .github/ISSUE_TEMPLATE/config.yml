@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Question ou aide à l'installation
-    url: https://github.com/jegweb/diacamma-syndic-synology/discussions
-    about: Posez vos questions dans les Discussions plutôt que dans un ticket.
+    url: https://github.com/jegweb/diacamma-syndic-synology/discussions/categories/questions-et-aide
+    about: Posez vos questions dans les Discussions (catégorie « Questions et aide ») plutôt que dans un ticket.
   - name: Problème de l'application Diacamma elle-même
     url: https://github.com/Diacamma2/syndic/issues
     about: Comptabilité, appels de fonds, impressions… Ces fonctions relèvent de l'équipe Diacamma. Bogues dans ses tickets, questions sur son forum (forum.diacamma.org).
