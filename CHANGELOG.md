@@ -4,7 +4,7 @@ Les versions s'écrivent `X.Y.Z-N` : `X.Y.Z` est la version de Diacamma Syndic i
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/).
 
-## [2.7.10-2]
+## [2.7.10-2] - 2026-11-19
 
 Révision de sécurité. Les versions de Diacamma et Lucterios sont les mêmes que dans 2.7.10-1 : la mise à jour ne lance aucune migration.
 
