@@ -21,6 +21,10 @@ PostgreSQL devient la base recommandée. Les versions de Diacamma et Lucterios s
 - Le mot de passe de la base PostgreSQL est créé automatiquement au premier démarrage, dans `secrets/db_password.txt`. Il n'y a plus de fichier à créer à la main.
 - Message explicite quand le compose ne correspond pas au moteur de l'instance (SQLite ou PostgreSQL), avec le fichier à prendre.
 
+### Sécurité
+
+- Le mot de passe de la base PostgreSQL n'apparaît plus dans le journal du conteneur, ni dans la sortie des commandes `diacamma`. Lucterios l'affichait à chaque démarrage.
+
 ## [2.7.10-2] - 2026-11-19
 
 Révision de sécurité. Les versions de Diacamma et Lucterios sont les mêmes que dans 2.7.10-1 : la mise à jour ne lance aucune migration.

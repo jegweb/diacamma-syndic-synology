@@ -87,6 +87,8 @@ Une mise à jour est détectée quand ce marqueur **existe** et diffère de `/op
 
 ### Particularités de Lucterios qui guident la conception
 
+- **Mot de passe de la base dans les sorties** : `lucterios_admin` (`add`, `modif`, `restore`…) affiche la chaîne de connexion, mot de passe compris. La fonction `lucterios_admin()` du script le masque (`sed -u`). Le `last_backup.log` des archives lancées depuis l'interface, écrit par Lucterios lui-même, le contient encore.
+- **Restauration depuis l'interface** : programmée 10 s plus tard dans le planificateur, elle dure parfois plusieurs minutes. Un redémarrage pendant ce temps laisse une base vide (le `loaddata` est annulé). La documentation de migration passe donc par `diacamma restore`, qui attend la fin.
 - **Réglages** : `lucterios_admin -e '<json>'` écrit chaque clé dans `settings.py` sous la forme `CLE = valeur`. Les chaînes de premier niveau sont écrites entre guillemets **sans échappement**, d'où la validation dans `extra_settings()`. `modif` conserve `SECRET_KEY` et la base, et fusionne les nouvelles clés avec les anciennes.
 - **`DEBUG` vaut `True` par défaut** dans Lucterios. On le force à `False`. Django ne sert alors plus `/static/` (WhiteNoise prend le relais), tandis que `/web/` reste servi par une vue Lucterios.
 - **Fuite de fichiers par `collectstatic`** : `STATICFILES_DIRS` contient le répertoire de l'instance. `collectstatic` y copierait `settings.py`, `db.sqlite3` et `usr/` (les documents). Pour l'éviter, on passe des options `-i` et on lance `clean-static` à chaque démarrage. Ne pas retirer ces protections.

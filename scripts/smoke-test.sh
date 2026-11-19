@@ -170,6 +170,9 @@ if [[ "$ENGINE" == postgresql ]]; then
   [[ "$(wc -c < "$T/secrets/db_password.txt" | tr -d ' ')" == 32 ]] \
     || fail "secrets/db_password.txt n'a pas été généré (32 caractères attendus)."
   log "OK : mot de passe de la base généré dans secrets/."
+  ! docker logs "$APP" 2>&1 | grep -F "$(cat "$T/secrets/db_password.txt")" >/dev/null \
+    || fail "le mot de passe de la base apparaît dans le journal."
+  log "OK : mot de passe de la base absent du journal."
 fi
 
 check_login
@@ -189,7 +192,11 @@ docker exec "$APP" diacamma backup
 archive="$(find "$T/backups" -maxdepth 1 -name 'manuel_syndic_*.lbk' -exec basename {} \; | head -n 1)"
 [[ -n "$archive" ]] || fail "aucune archive manuelle créée dans backups/."
 log "OK : archive $archive créée."
-docker exec "$APP" diacamma restore "$archive"
+docker exec "$APP" diacamma restore "$archive" 2>&1 | tee "$T/restauration.log"
+if [[ "$ENGINE" == postgresql ]]; then
+  ! grep -F "$(cat "$T/secrets/db_password.txt")" "$T/restauration.log" >/dev/null \
+    || fail "le mot de passe de la base apparaît dans la sortie de la restauration."
+fi
 docker restart "$APP" >/dev/null
 check_login
 log "OK : restauration puis redémarrage."

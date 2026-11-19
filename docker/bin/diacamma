@@ -24,7 +24,12 @@ export DJANGO_SETTINGS_MODULE="$INSTANCE.settings"
 log() { printf '[diacamma] %s\n' "$*" >&2; }
 die() { log "ERREUR : $*"; exit 1; }
 
-lucterios_admin() { (cd "$DATA_DIR" && python -m lucterios.install.lucterios_admin "$@" -i "$DATA_DIR"); }
+# lucterios_admin affiche la chaîne de connexion à la base, mot de passe
+# compris (« database postgresql (…, password=…) ») : on le masque.
+lucterios_admin() {
+  (cd "$DATA_DIR" && python -m lucterios.install.lucterios_admin "$@" -i "$DATA_DIR") \
+    | sed -u -E 's/(password=)[^,)]*/\1***/g'
+}
 manage() { (cd "$DATA_DIR" && python "$DATA_DIR/manage_$INSTANCE.py" "$@"); }
 helper() { python "$LIB_DIR/diacamma_docker.py" "$@"; }
 

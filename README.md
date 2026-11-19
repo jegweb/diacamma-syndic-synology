@@ -230,7 +230,7 @@ Ces sauvegardes restent sur le NAS. Ajoutez le dossier `docker/diacamma-syndic` 
 
 ### Restaurer
 
-- **Depuis l'interface** : menu des archives → choisir l'archive → restaurer.
+- **Depuis l'interface** : menu des archives → choisir l'archive → restaurer. La restauration démarre une dizaine de secondes après la confirmation, puis se poursuit en arrière-plan, parfois plusieurs minutes. Vous êtes déconnecté et la connexion échoue tant qu'elle n'est pas finie. **Ne redémarrez pas le conteneur pendant ce temps** : la restauration serait interrompue et la base resterait vide. Elle est terminée quand vous pouvez vous reconnecter avec les comptes de l'archive ; le lien « dernier journal d'archivage », dans la liste des archives, en donne le compte rendu.
 - **En SSH** :
 
   ```sh
@@ -337,7 +337,7 @@ Le moteur de base d'une instance existante ne peut pas être changé en modifian
 4. Créez les dossiers vides `data`, `postgresql` et `secrets`. Si `postgresql` ou `secrets` existent déjà, créés par Docker après une erreur de fichier, supprimez-les d'abord.
 5. Remplacez `docker-compose.yml` par celui du kit, la version PostgreSQL. Gardez `.env` et `backups/`.
 6. **Créez** le projet. Une instance vide est créée, avec un nouveau mot de passe `admin` (voir le journal). Attendez que `diacamma-syndic` soit « sain ».
-7. Restaurez l'archive, depuis l'interface (menu des archives) ou en SSH : `sudo docker exec diacamma-syndic diacamma restore <archive>.lbk`. Redémarrez ensuite le conteneur `diacamma-syndic`.
+7. Restaurez l'archive en SSH : `sudo docker exec diacamma-syndic diacamma restore <archive>.lbk`. La commande peut durer plusieurs minutes : attendez la ligne `[diacamma] Restauration terminée`. Redémarrez ensuite le conteneur `diacamma-syndic`. Sans accès SSH, restaurez depuis l'interface, en attendant la fin comme expliqué dans [Restaurer](#restaurer), avant de redémarrer.
 8. Vérifiez vos données. Les comptes et leurs mots de passe sont ceux de l'archive.
 
 Pour revenir en arrière : **Arrêter**, **Nettoyer**, supprimez `data`, `postgresql` et `secrets`, renommez `data.sqlite` en `data`, remettez `docker-compose.sqlite.yml` renommé en `docker-compose.yml`, puis **Créer**.
@@ -390,7 +390,8 @@ Un démarrage normal se termine par `[diacamma] Démarrage de Diacamma Syndic (�
 | « En attente de la base PostgreSQL » qui se répète, puis « la base PostgreSQL … ne répond pas » | Lisez le journal de `diacamma-syndic-db`. Le plus souvent, `postgresql` ou `secrets` ont été créés par Docker et appartiennent à `root` (voir [Permissions](#permissions-puidpgid)). |
 | « [diacamma-db] ERREUR : la base existe déjà dans postgresql/, mais secrets/db_password.txt manque » | Le fichier a été supprimé. Recréez-le à partir de la copie gardée par Diacamma. En SSH, depuis le dossier du projet : `sudo grep -o '"PASSWORD": "[^"]*' data/syndic/settings.py \| cut -d'"' -f4 \| sudo tee secrets/db_password.txt >/dev/null`, puis `sudo chown 1026:100 secrets/db_password.txt && sudo chmod 600 secrets/db_password.txt` (vos `PUID:PGID`). Redémarrez ensuite le projet. |
 | « PostgreSQL refuse le mot de passe de secrets/db_password.txt » | Le fichier a été remplacé ou modifié après la création de la base. Recréez-le comme dans la ligne précédente. |
-| « relation "CORE_parameter" does not exist » dans le journal PostgreSQL au premier démarrage | Sans conséquence : Lucterios interroge ses paramètres avant de créer les tables. |
+| « LegalEntity matching query does not exist » à chaque connexion, après une restauration | La restauration a été interrompue, le plus souvent par un redémarrage du conteneur pendant qu'elle tournait : la base est vide. Relancez-la en SSH, `sudo docker exec diacamma-syndic diacamma restore <archive>.lbk`, attendez `[diacamma] Restauration terminée`, puis redémarrez le conteneur. |
+| Dans le journal de `diacamma-syndic-db` : « relation "CORE_parameter" does not exist » ou « the database system is starting up » au premier démarrage, « chmod: changing permissions of '/run/postgresql': Operation not permitted », ou « violates foreign key constraint » pendant une restauration | Sans conséquence. Lucterios interroge ses paramètres avant de créer les tables, et vide les tables sans tenir compte de leur ordre avant une restauration (PostgreSQL signale chaque tentative refusée). La base tourne sans droits root, dans un dossier déjà accessible. |
 | « SyntaxWarning: invalid escape sequence » ou « Your models in app(s): … have changes that are not yet reflected in a migration » à chaque démarrage | Sans conséquence : ces messages viennent du code de Diacamma et Lucterios eux-mêmes. Ne lancez pas `makemigrations`. |
 | « pull access denied » ou « denied » | Si le message cite `diacamma-syndic` sans `ghcr.io`, votre `docker-compose.yml` vient d'une ancienne version, qui construisait l'image sur le NAS : remplacez-le par celui du kit (voir [Mise à jour](#mise-à-jour)). S'il cite `ghcr.io/jegweb/diacamma-syndic`, l'image n'est pas accessible publiquement : signalez-le dans un ticket. |
 | « Error » lors du téléchargement de l'image (« Pulling ») | Container Manager n'affiche pas la cause. Pour la voir, en SSH depuis le dossier du projet : `sudo docker compose pull`. |
