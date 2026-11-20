@@ -80,4 +80,4 @@ L'intégration continue reconstruit aussi l'image sans cache le 1er de chaque mo
 
 Les runners arm64 (`ubuntu-24.04-arm`) ne sont gratuits que pour les dépôts publics.
 
-**Nouveau paquet sur ghcr.io.** Un paquet d'image créé par le workflow est privé. Après son premier envoi (par exemple `ghcr.io/jegweb/diacamma`, à la première pré-version 2.7.10-4), passez-le en public : page du paquet → **Package settings** → **Change visibility**. Sinon, Container Manager ne peut pas le télécharger.
+**Nouveau paquet sur ghcr.io.** Un paquet d'image créé par le workflow prend la visibilité du dépôt : `ghcr.io/jegweb/diacamma` est ainsi devenu public dès la pré-version 2.7.10-4-rc1. Vérifiez-le quand même après le premier envoi d'un nouveau nom, car Container Manager ne télécharge que des paquets publics. Au besoin : page du paquet → **Package settings** → **Change visibility**.
