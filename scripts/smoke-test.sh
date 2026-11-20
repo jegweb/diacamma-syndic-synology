@@ -17,7 +17,7 @@
 #   Exemples :
 #     docker build -t diacamma:local . && scripts/smoke-test.sh diacamma:local
 #     scripts/smoke-test.sh --asso diacamma:local
-#     scripts/smoke-test.sh --depuis ghcr.io/jegweb/diacamma-syndic:latest diacamma:local
+#     scripts/smoke-test.sh --depuis ghcr.io/jegweb/diacamma:latest diacamma:local
 # Variable : SMOKE_TIMEOUT, délai maximal d'attente de l'état « healthy » (600 s).
 set -euo pipefail
 cd "$(dirname "$0")/.."

@@ -60,21 +60,13 @@ jobs:
           VARIANT: ${{ matrix.variant }}
         run: |
           image="$(sed -nE 's/^ *image: *([^ :]*\/diacamma):.*/\1/p' docker-compose.yml | head -n 1)"
-          # Les installations Syndic existantes partent de l'alias -syndic, seul
-          # nom de l'image avant 2.7.10-4 et toujours publié.
-          syndic="$image-syndic:latest"
+          # Dernière version publiée, avec Syndic et Asso depuis 2.7.10-4.
+          latest="$image:latest"
           case "$VARIANT" in
             sqlite) scripts/smoke-test.sh --sqlite diacamma:ci ;;
-            mise-a-jour) scripts/smoke-test.sh --depuis "$syndic" diacamma:ci ;;
-            mise-a-jour-sqlite) scripts/smoke-test.sh --sqlite --depuis "$syndic" diacamma:ci ;;
+            mise-a-jour) scripts/smoke-test.sh --depuis "$latest" diacamma:ci ;;
+            mise-a-jour-sqlite) scripts/smoke-test.sh --sqlite --depuis "$latest" diacamma:ci ;;
             asso) scripts/smoke-test.sh --asso diacamma:ci ;;
-            mise-a-jour-asso)
-              if docker pull -q "$image:latest" >/dev/null 2>&1 \
-                && docker run --rm --entrypoint test "$image:latest" -e /opt/diacamma/build-id/asso; then
-                scripts/smoke-test.sh --asso --depuis "$image:latest" diacamma:ci
-              else
-                echo "::notice::$image:latest absente ou sans Diacamma Asso : installation neuve à la place."
-                scripts/smoke-test.sh --asso --sqlite diacamma:ci
-              fi ;;
+            mise-a-jour-asso) scripts/smoke-test.sh --asso --depuis "$latest" diacamma:ci ;;
             *) scripts/smoke-test.sh diacamma:ci ;;
           esac
