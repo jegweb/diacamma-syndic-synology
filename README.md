@@ -306,7 +306,7 @@ Depuis la version 2.7.10-4, l'image s'appelle `ghcr.io/jegweb/diacamma`, car ell
 
 L'ancien nom reste publié avec les mêmes versions.
 
-Depuis 2.7.10-4, la base n'a plus de réseau : Diacamma la joint par son socket. **Prenez donc le `docker-compose.yml` du nouveau kit** ; ne vous contentez pas de changer le numéro de version dans l'ancien. Au premier démarrage, le journal indique `Adresse de la base mise à jour dans settings.py : /var/run/postgresql`. Les réseaux `diacamma-syndic_default` et `diacamma-syndic_backend` des versions précédentes ne servent plus, mais « Nettoyer » ne les supprime pas : supprimez-les ensuite dans **Container Manager** → **Réseau**.
+Depuis 2.7.10-4, la base n'a plus de réseau : Diacamma la joint par son socket. **Prenez donc le `docker-compose.yml` du nouveau kit** ; ne vous contentez pas de changer le numéro de version dans l'ancien. Au premier démarrage, le journal indique `Adresse de la base mise à jour dans settings.py : /var/run/postgresql`. Les réseaux `diacamma-syndic_default` et `diacamma-syndic_backend` des versions précédentes ne servent plus. Container Manager les supprime normalement de lui-même ; s'ils figurent encore dans **Container Manager** → **Réseau**, supprimez-les.
 
 **Revenir à une version d'avant 2.7.10-4 (PostgreSQL)** : l'ancienne version ne connaît pas le socket. Arrêtez le projet, remettez l'ancien `docker-compose.yml`, puis rendez à `settings.py` l'ancienne adresse de la base. En SSH, depuis le dossier du projet :
 

@@ -8,7 +8,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/).
 
 Diacamma Asso rejoint le projet. Diacamma Syndic et Lucterios restent en version 2.7.10 : pour les installations existantes, la mise à jour ne lance aucune migration.
 
-**Installations Diacamma Syndic existantes** : la mise à jour se fait comme d'habitude avec le kit `diacamma-syndic`, en prenant bien son `docker-compose.yml` (la base n'a plus de réseau, voir ci-dessous). L'image change de nom ; l'ancienne peut être supprimée ensuite, ainsi que les réseaux `diacamma-syndic_default` et `diacamma-syndic_backend` (Container Manager → Réseau), que « Nettoyer » laisse en place. Pour revenir ensuite à une version antérieure en PostgreSQL, une ligne de `settings.py` est à rétablir (README, « Installations d'avant la version 2.7.10-4 »).
+**Installations Diacamma Syndic existantes** : la mise à jour se fait comme d'habitude avec le kit `diacamma-syndic`, en prenant bien son `docker-compose.yml` (la base n'a plus de réseau, voir ci-dessous). L'image change de nom ; l'ancienne peut être supprimée ensuite, ainsi que les réseaux `diacamma-syndic_default` et `diacamma-syndic_backend` s'ils figurent encore dans Container Manager → Réseau (il les supprime normalement de lui-même). Pour revenir ensuite à une version antérieure en PostgreSQL, une ligne de `settings.py` est à rétablir (README, « Installations d'avant la version 2.7.10-4 »).
 
 ### Ajouté
 
