@@ -15,7 +15,7 @@ docker build -t diacamma:local .                            # construire l'image
 docker build --platform linux/amd64 -t diacamma:amd64-test .   # vérifier l'autre architecture
 scripts/smoke-test.sh diacamma:local                        # test de fumée Syndic, PostgreSQL (--sqlite pour l'autre variante)
 scripts/smoke-test.sh --asso diacamma:local                 # même test avec le kit Asso
-scripts/smoke-test.sh --depuis ghcr.io/jegweb/diacamma-syndic:latest diacamma:local   # test de mise à jour
+scripts/smoke-test.sh --depuis ghcr.io/jegweb/diacamma:latest diacamma:local   # test de mise à jour
 scripts/kit.sh asso <dossier> [image:tag]                   # fichiers du kit Asso (dérivés de ceux de Syndic)
 scripts/update-lock.sh                                      # régénérer requirements.lock depuis requirements.in
 scripts/build-image.sh amd64                                # image exportée en dist/*.tar pour import dans Container Manager
@@ -47,14 +47,14 @@ docker exec -w /project dind24 docker compose up -d
 
 ### Publication
 
-L'image est publiée sur `ghcr.io/jegweb/diacamma` (dépôt `jegweb/diacamma-synology`), et sous l'alias `ghcr.io/jegweb/diacamma-syndic`, nom d'avant 2.7.10-4, avec les mêmes tags. Versions `X.Y.Z-N` : version de Diacamma (Syndic et Asso sortent ensemble, même `X.Y.Z`), puis révision de l'empaquetage. La procédure complète est dans `CONTRIBUTING.md`.
+L'image est publiée sur `ghcr.io/jegweb/diacamma` (dépôt `jegweb/diacamma-synology`). L'ancien nom `ghcr.io/jegweb/diacamma-syndic` (jusqu'à 2.7.10-3, puis alias pour 2.7.10-4) **n'est plus alimenté** : il garde ses versions, `latest` = 2.7.10-4. Ne pas le supprimer : les kits d'avant 2.7.10-4 le téléchargent à chaque « Créer », et le retour en arrière vers 2.7.10-3 en dépend. Versions `X.Y.Z-N` : version de Diacamma (Syndic et Asso sortent ensemble, même `X.Y.Z`), puis révision de l'empaquetage. La procédure complète est dans `CONTRIBUTING.md`.
 
 - Le tag d'image est écrit en dur dans **les deux** compose (ceux de Syndic ; le kit Asso en est dérivé).
 - **Plafonds prudents** (`requirements.in`) : une dépendance indirecte que l'amont ne limite pas, et dont une version majeure est sortie après la version amont de Diacamma, est plafonnée sous cette majeure. Les règles complètes sont dans CONTRIBUTING, étape 1. Le Dockerfile lance `pip check` : seule l'absence de PyQt6 est tolérée.
-- Test de mise à jour : `smoke-test.sh [--sqlite] --depuis <image publiée>`. L'ancienne image tourne d'abord avec **le kit de sa version** : version lue dans le libellé `org.opencontainers.image.version`, fichiers extraits de l'étiquette Git `v<version>` (son `scripts/kit.sh` s'il existe). D'où `fetch-depth: 0` dans les workflows. La CI (variantes `mise-a-jour` et `mise-a-jour-sqlite`) et la publication le lancent pour Syndic depuis l'alias `diacamma-syndic:latest`, pour les deux bases. Pour Asso (`--asso --depuis`), depuis `diacamma:latest` quand elle contient Asso ; sinon une installation SQLite d'Asso le remplace.
+- Test de mise à jour : `smoke-test.sh [--sqlite] --depuis <image publiée>`. L'ancienne image tourne d'abord avec **le kit de sa version** : version lue dans le libellé `org.opencontainers.image.version`, fichiers extraits de l'étiquette Git `v<version>` (son `scripts/kit.sh` s'il existe). D'où `fetch-depth: 0` dans les workflows. La CI (variantes `mise-a-jour`, `mise-a-jour-sqlite` et `mise-a-jour-asso`) et la publication le lancent depuis `diacamma:latest`, qui contient Syndic et Asso depuis 2.7.10-4.
 - `scan.yml` : analyse Trivy hebdomadaire de `:latest`, avec une version de Trivy épinglée à la main. Seuil : HIGH/CRITICAL, failles corrigées seulement. La réponse attendue à un échec est une révision `-N+1` (procédure dans CONTRIBUTING).
 - Une étiquette Git `vX.Y.Z-N` (ou `-rcM`) lance `.github/workflows/release.yml`. Il vérifie la cohérence (étiquette, compose, `diacamma-syndic` et `diacamma-asso` à `X.Y.Z` dans `requirements.lock`, entrée `## [X.Y.Z-N]` du CHANGELOG), puis construit et teste sur des runners natifs amd64 et arm64.
-- Il pousse l'image testée sous `X.Y.Z-N-<arch>`, assemble le manifeste multi-architecture (`X.Y.Z-N`, puis `X.Y.Z` et `latest` hors pré-version), le recopie sous l'alias `-syndic`, et crée la Release avec deux kits `.zip` produits par `scripts/kit.sh` (`diacamma-syndic-…` et `diacamma-asso-…`, chacun avec deux compose et `.env.example`).
+- Il pousse l'image testée sous `X.Y.Z-N-<arch>`, assemble le manifeste multi-architecture (`X.Y.Z-N`, puis `X.Y.Z` et `latest` hors pré-version), et crée la Release avec deux kits `.zip` produits par `scripts/kit.sh` (`diacamma-syndic-…` et `diacamma-asso-…`, chacun avec deux compose et `.env.example`).
 - Un nouveau paquet GHCR créé par le workflow prend la visibilité du dépôt (public : constaté pour `diacamma` à la rc1 de 2.7.10-4). Le vérifier après le premier envoi d'un nouveau nom.
 - Images sans attestation (`provenance`/`sbom` désactivés), pour le Docker 24 de Container Manager.
 - Une version définitive est annoncée par une discussion dans la catégorie `ANNONCES` (« Annonces »), seulement si cette catégorie existe. Le formulaire `.github/DISCUSSION_TEMPLATE/questions-et-aide.yml` doit porter le nom (slug) de la catégorie « Questions et aide ».

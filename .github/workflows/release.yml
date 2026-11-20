@@ -1,6 +1,7 @@
 # Publication d'une version : étiquette Git vX.Y.Z-N (ou vX.Y.Z-N-rcM pour une
 # pré-version). Construit et teste l'image sur amd64 et arm64 (runners natifs),
-# la publie sur ghcr.io (avec l'alias <image>-syndic, nom d'avant 2.7.10-4),
+# la publie sur ghcr.io (l'ancien nom <image>-syndic n'est plus alimenté depuis
+# 2.7.10-4 : il garde ses versions pour les anciens kits),
 # puis crée la Release GitHub avec un kit d'installation par application.
 name: Publication
 
@@ -94,23 +95,11 @@ jobs:
       - name: Test de mise à jour depuis la dernière version publiée
         run: |
           new="$IMAGE:$VERSION-${{ matrix.arch }}"
-          # Installations Syndic existantes : alias -syndic, seul nom de l'image
-          # avant 2.7.10-4.
-          if docker buildx imagetools inspect "$IMAGE-syndic:latest" >/dev/null 2>&1; then
-            scripts/smoke-test.sh --depuis "$IMAGE-syndic:latest" "$new"
-            # Installations SQLite existantes ; couvre aussi les contrôles SQLite.
-            scripts/smoke-test.sh --sqlite --depuis "$IMAGE-syndic:latest" "$new"
-          else
-            echo "Aucune version publiée : test de mise à jour remplacé par une installation SQLite."
-            scripts/smoke-test.sh --sqlite "$new"
-          fi
-          if docker pull -q "$IMAGE:latest" >/dev/null 2>&1 \
-            && docker run --rm --entrypoint test "$IMAGE:latest" -e /opt/diacamma/build-id/asso; then
-            scripts/smoke-test.sh --asso --depuis "$IMAGE:latest" "$new"
-          else
-            echo "::notice::$IMAGE:latest absente ou sans Diacamma Asso : installation SQLite d'Asso à la place."
-            scripts/smoke-test.sh --asso --sqlite "$new"
-          fi
+          # Dernière version publiée, avec Syndic et Asso depuis 2.7.10-4.
+          scripts/smoke-test.sh --depuis "$IMAGE:latest" "$new"
+          # Installations SQLite existantes ; couvre aussi les contrôles SQLite.
+          scripts/smoke-test.sh --sqlite --depuis "$IMAGE:latest" "$new"
+          scripts/smoke-test.sh --asso --depuis "$IMAGE:latest" "$new"
       - uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -152,10 +141,6 @@ jobs:
           fi
           docker buildx imagetools create "${tags[@]}" "$IMAGE:$VERSION-amd64" "$IMAGE:$VERSION-arm64"
           docker buildx imagetools inspect "$IMAGE:$VERSION"
-          # Mêmes tags sous l'alias <image>-syndic : les compose d'avant 2.7.10-4
-          # et les tests de mise à jour de Syndic s'y réfèrent.
-          docker buildx imagetools create "${tags[@]//$IMAGE:/$IMAGE-syndic:}" "$IMAGE:$VERSION"
-          docker buildx imagetools inspect "$IMAGE-syndic:$VERSION"
       - name: Kits d'installation
         run: |
           for appli in syndic asso; do
@@ -176,7 +161,7 @@ jobs:
             echo "- Diacamma Syndic (copropriété) : \`diacamma-syndic-$VERSION.zip\` ;"
             echo "- Diacamma Asso (association) : \`diacamma-asso-$VERSION.zip\`."
             echo
-            echo "Image : \`$IMAGE:$VERSION\` (amd64 et arm64), aussi publiée sous \`$IMAGE-syndic:$VERSION\`."
+            echo "Image : \`$IMAGE:$VERSION\` (amd64 et arm64)."
           } > notes.md
           flags=()
           if [[ "$PRERELEASE" == true ]]; then

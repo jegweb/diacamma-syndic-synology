@@ -27,13 +27,13 @@ docker build -t diacamma:local .
 scripts/smoke-test.sh diacamma:local                   # Syndic, base PostgreSQL
 scripts/smoke-test.sh --sqlite diacamma:local          # Syndic, base SQLite
 scripts/smoke-test.sh --asso diacamma:local            # Asso, base PostgreSQL (--asso --sqlite : SQLite)
-scripts/smoke-test.sh --depuis ghcr.io/jegweb/diacamma-syndic:latest diacamma:local            # mise à jour
-scripts/smoke-test.sh --sqlite --depuis ghcr.io/jegweb/diacamma-syndic:latest diacamma:local   # mise à jour, SQLite
+scripts/smoke-test.sh --depuis ghcr.io/jegweb/diacamma:latest diacamma:local            # mise à jour
+scripts/smoke-test.sh --sqlite --depuis ghcr.io/jegweb/diacamma:latest diacamma:local   # mise à jour, SQLite
 scripts/smoke-test.sh --asso --depuis ghcr.io/jegweb/diacamma:latest diacamma:local            # mise à jour d'Asso
 docker run --rm -v "$PWD:/mnt:ro" koalaman/shellcheck:stable docker/bin/diacamma scripts/*.sh
 ```
 
-Les mises à jour de Syndic partent de l'alias `diacamma-syndic`, que font tourner les installations d'avant 2.7.10-4. Celle d'Asso n'est possible qu'une fois publiée une version qui le contient.
+Les mises à jour partent de la dernière version publiée, `ghcr.io/jegweb/diacamma:latest`, qui contient Syndic et Asso depuis 2.7.10-4. L'ancien nom `ghcr.io/jegweb/diacamma-syndic` n'est plus alimenté : il garde ses versions (jusqu'à 2.7.10-4) pour les anciens kits et le retour en arrière. Ne le supprimez pas.
 
 `smoke-test.sh` lance le projet dans un dossier temporaire et vérifie plusieurs points :
 
@@ -70,7 +70,7 @@ Les versions s'écrivent `X.Y.Z-N` (voir [CHANGELOG.md](CHANGELOG.md)).
 3. Ajoutez l'entrée `## [X.Y.Z-N]` au CHANGELOG.
 4. Testez (voir plus haut), commitez, puis poussez une pré-version : `git tag vX.Y.Z-N-rc1 && git push origin vX.Y.Z-N-rc1`.
 5. Le workflow « Publication » vérifie la cohérence de l'étiquette, des compose, du verrou et du CHANGELOG. Il construit et teste l'image sur amd64 et arm64 (Syndic et Asso), la publie sur ghcr.io et crée une Release marquée comme pré-version, avec un kit par application. Testez les deux kits sur un NAS, côte à côte grâce à leurs ports différents, et de préférence avec le pare-feu de DSM activé : connexion par le portail Web Station, courriel de test, sauvegarde.
-6. Publiez la version définitive : `git tag vX.Y.Z-N && git push origin vX.Y.Z-N`. Les tags d'image `X.Y.Z-N`, `X.Y.Z` et `latest` sont publiés, sous `ghcr.io/jegweb/diacamma` et sous l'alias `ghcr.io/jegweb/diacamma-syndic`. La Release est aussi annoncée par une discussion dans la catégorie « Annonces ». Si vous renommez cette catégorie, mettez à jour la variable `ANNONCES` de `release.yml` ; sinon la Release est créée sans annonce, avec un avertissement.
+6. Publiez la version définitive : `git tag vX.Y.Z-N && git push origin vX.Y.Z-N`. Les tags d'image `X.Y.Z-N`, `X.Y.Z` et `latest` sont publiés, sous `ghcr.io/jegweb/diacamma`. La Release est aussi annoncée par une discussion dans la catégorie « Annonces ». Si vous renommez cette catégorie, mettez à jour la variable `ANNONCES` de `release.yml` ; sinon la Release est créée sans annonce, avec un avertissement.
 
 **Correctifs de sécurité.** Chaque lundi, le workflow « Failles de sécurité » (`scan.yml`) analyse l'image publiée (`latest`) avec Trivy. Il échoue s'il trouve une faille HIGH ou CRITICAL déjà corrigée en amont, et GitHub vous envoie alors un courriel. Publiez dans ce cas une révision `-N+1` :
 
