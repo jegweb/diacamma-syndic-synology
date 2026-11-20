@@ -125,10 +125,13 @@ database_arg() {
       fi
       [[ "$password" =~ ^[A-Za-z0-9._~+-]{12,}$ ]] \
         || die "le mot de passe PostgreSQL doit faire au moins 12 caractères parmi A-Z a-z 0-9 . _ ~ + -."
-      for name in DIACAMMA_DB_HOST DIACAMMA_DB_NAME DIACAMMA_DB_USER; do
+      for name in DIACAMMA_DB_NAME DIACAMMA_DB_USER; do
         value="${!name:-}"
         [[ "$value" =~ ^[A-Za-z0-9._-]+$ ]] || die "$name est vide ou contient des caractères non autorisés."
       done
+      # Nom d'hôte, ou dossier du socket (/var/run/postgresql dans le compose).
+      [[ "${DIACAMMA_DB_HOST:-}" =~ ^[A-Za-z0-9._/-]+$ ]] \
+        || die "DIACAMMA_DB_HOST est vide ou contient des caractères non autorisés."
       [[ "${DIACAMMA_DB_PORT:-5432}" =~ ^[0-9]+$ ]] || die "DIACAMMA_DB_PORT doit être un nombre."
       echo "postgresql:name=$DIACAMMA_DB_NAME,user=$DIACAMMA_DB_USER,password=$password,host=$DIACAMMA_DB_HOST,port=${DIACAMMA_DB_PORT:-5432}"
       ;;
@@ -163,7 +166,8 @@ create_instance() {
 }
 
 update_instance() {
-  local extra="$1" engine previous snapshot
+  local extra="$1" engine previous snapshot database
+  local -a args=()
   engine="$(instance_engine)"
   if [[ "$engine" != "$(db_engine)" ]]; then
     case "$engine:$(db_engine)" in
@@ -188,8 +192,16 @@ update_instance() {
       log "Base PostgreSQL : pas d'instantané automatique, assurez-vous d'avoir une sauvegarde récente."
     fi
   fi
+  # Adresse de la base changée par le compose (jusqu'à 2.7.10-3 : hôte « db »,
+  # en TCP ; depuis : le socket) : modif la réécrit avec -d. Sinon, la base
+  # enregistrée dans settings.py est gardée telle quelle.
+  if [[ "$engine" == postgresql ]] && ! grep -qF "\"HOST\": \"$DIACAMMA_DB_HOST\"," "$SETTINGS"; then
+    database="$(database_arg)"
+    args=(-d "$database")
+    log "Adresse de la base mise à jour dans settings.py : $DIACAMMA_DB_HOST."
+  fi
   # modif réécrit settings.py (clé secrète et base conservées) puis applique les migrations.
-  lucterios_admin modif -n "$INSTANCE" -e "$extra"
+  lucterios_admin modif -n "$INSTANCE" -e "$extra" "${args[@]}"
 }
 
 collect_static() {

@@ -9,9 +9,11 @@
 #   --sqlite : variante SQLite (docker-compose.sqlite.yml) au lieu de PostgreSQL.
 #     Vérifie aussi qu'un compose PostgreSQL est refusé sur une instance SQLite,
 #     et que le kit de l'autre application est refusé sur ces données.
-#   --depuis : installe d'abord l'ancienne image, puis passe à la nouvelle, comme
-#     un utilisateur qui met à jour. Vérifie la détection de la mise à jour, les
-#     migrations et l'instantané SQLite (si les versions des paquets diffèrent).
+#   --depuis : installe d'abord l'ancienne image avec le kit de sa version (pris
+#     dans l'étiquette Git v<version>, version lue dans l'image), puis passe au
+#     nouveau kit et à la nouvelle image, comme un utilisateur qui met à jour.
+#     Vérifie la détection de la mise à jour, les migrations et l'instantané
+#     SQLite (si les versions des paquets diffèrent).
 #   Exemples :
 #     docker build -t diacamma:local . && scripts/smoke-test.sh diacamma:local
 #     scripts/smoke-test.sh --asso diacamma:local
@@ -60,7 +62,11 @@ cleanup() {
     log "Journal des conteneurs :"
     compose logs --no-color --tail 150 >&2 || true
   fi
-  compose down --remove-orphans >/dev/null 2>&1 || true
+  compose down -v --remove-orphans >/dev/null 2>&1 || true
+  # Restes que le dernier compose ne déclare pas : réseaux des kits d'avant
+  # 2.7.10-4 (--depuis), volume du socket après un passage en SQLite.
+  docker network rm diacamma-test_backend diacamma-test_default >/dev/null 2>&1 || true
+  docker volume rm diacamma-test_db-socket >/dev/null 2>&1 || true
   rm -rf "$T"
   exit "$status"
 }
@@ -89,6 +95,28 @@ if [[ -n "$FROM_IMAGE" && "$APPLI" == asso ]]; then
   docker run --rm --entrypoint test "$FROM_IMAGE" -e /opt/diacamma/build-id/asso \
     || fail "$FROM_IMAGE ne contient pas Diacamma Asso : pas de mise à jour à tester."
 fi
+# Compose du kit de l'ancienne version, pris dans son étiquette Git : une
+# ancienne image ne sait pas lire le compose actuel (depuis 2.7.10-4, la base
+# est jointe par son socket et n'a plus de réseau).
+old_kit() {
+  local version src
+  pull_if_needed "$FROM_IMAGE"
+  version="$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.version"}}' "$FROM_IMAGE")"
+  git rev-parse -q --verify "refs/tags/v$version" >/dev/null \
+    || fail "étiquette Git v$version absente (version de $FROM_IMAGE) : lancez git fetch --tags."
+  mkdir -p "$T/ancien"
+  git archive "v$version" | tar -x -C "$T/ancien"
+  if [[ -f "$T/ancien/scripts/kit.sh" ]]; then
+    bash "$T/ancien/scripts/kit.sh" "$APPLI" "$T/ancien-kit" >/dev/null
+    src="$T/ancien-kit/$COMPOSE_SRC"
+  else
+    # Avant 2.7.10-4 : Syndic seul, compose à la racine du dépôt.
+    src="$T/ancien/$COMPOSE_SRC"
+  fi
+  [[ -f "$src" ]] || fail "le kit v$version ne contient pas $COMPOSE_SRC."
+  cp "$src" "$T/docker-compose.yml"
+  log "Ancienne version : kit v$version."
+}
 {
   echo "DIACAMMA_ALLOWED_HOSTS=$HOST"
   echo "DIACAMMA_ADMIN_PASSWORD=$PASSWORD"
@@ -152,14 +180,16 @@ check_login() {
 
 log "Dossier de test : $T (kit $APPLI, $COMPOSE_SRC, image $IMAGE${FROM_IMAGE:+, depuis $FROM_IMAGE})"
 if [[ -n "$FROM_IMAGE" ]]; then
+  old_kit
   set_image "$FROM_IMAGE"
   [[ "$ENGINE" == sqlite ]] || start_db_first
   compose up -d --quiet-pull
   wait_healthy
   check_login
-  log "OK : installation de l'ancienne version ; passage à $IMAGE."
+  log "OK : installation de l'ancienne version ; passage au nouveau kit et à $IMAGE."
   old_id="$(build_id "$FROM_IMAGE")"
   new_id="$(build_id "$IMAGE")"
+  cp "$T/kit/$COMPOSE_SRC" "$T/docker-compose.yml"
   set_image "$IMAGE"
   compose up -d --quiet-pull
   wait_healthy
@@ -186,6 +216,34 @@ else
 fi
 [[ "$(docker inspect -f '{{.State.Running}}' "$APP-sauvegarde")" == true ]] || fail "le service de sauvegarde ne tourne pas."
 log "OK : service de sauvegarde lancé."
+
+# Réseaux : l'application sur le réseau « bridge » de Docker, le reste sans
+# réseau, et aucun réseau créé par le projet (pare-feu de DSM, plages épuisées).
+check_network() {
+  local mode
+  mode="$(docker inspect -f '{{.HostConfig.NetworkMode}}' "$1")"
+  [[ "$mode" == "$2" ]] || fail "« $1 » est sur le réseau « $mode » au lieu de « $2 »."
+}
+check_network "$APP" bridge
+check_network "$APP-sauvegarde" none
+if [[ "$ENGINE" == postgresql ]]; then
+  check_network "$APP-db" none
+  docker exec "$APP" grep -F '"HOST": "/var/run/postgresql",' "/data/$APPLI/settings.py" >/dev/null \
+    || fail "settings.py ne désigne pas le socket de la base (/var/run/postgresql)."
+  # Sonde pg_isready, par le socket : c'est l'état affiché par Container Manager.
+  waited=0
+  until [[ "$(docker inspect -f '{{.State.Health.Status}}' "$APP-db")" == healthy ]]; do
+    (( waited < 60 )) || fail "« $APP-db » n'est pas healthy (sonde pg_isready par le socket)."
+    sleep 3
+    waited=$(( waited + 3 ))
+  done
+fi
+if [[ -z "$FROM_IMAGE" && -n "$(docker network ls -q --filter label=com.docker.compose.project=diacamma-test)" ]]; then
+  fail "le projet a créé un réseau Docker."
+fi
+log "OK : application sur le réseau bridge, base et sauvegarde sans réseau."
+[[ "$ENGINE" == sqlite ]] || log "OK : « $APP-db » healthy (pg_isready par le socket)."
+
 if [[ "$ENGINE" == postgresql ]]; then
   [[ "$(wc -c < "$T/secrets/db_password.txt" | tr -d ' ')" == 32 ]] \
     || fail "secrets/db_password.txt n'a pas été généré (32 caractères attendus)."
@@ -208,7 +266,8 @@ code="$(http_code / inconnu.example.test)"
 log "OK : hôte inconnu → 400."
 
 docker exec "$APP" diacamma version
-docker exec "$APP" diacamma backup
+# Dans le conteneur de sauvegarde, sans réseau, comme la sauvegarde de la nuit.
+docker exec "$APP-sauvegarde" diacamma backup
 archive="$(find "$T/backups" -maxdepth 1 -name "manuel_${APPLI}_*.lbk" -exec basename {} \; | head -n 1)"
 [[ -n "$archive" ]] || fail "aucune archive manuelle créée dans backups/."
 log "OK : archive $archive créée."

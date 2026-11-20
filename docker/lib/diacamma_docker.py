@@ -277,6 +277,30 @@ def db_password():
     return Path(path).read_text(encoding='utf-8').rstrip('\n')
 
 
+def postgresql_ready(params):
+    """Vrai si le serveur définitif accepte la connexion à la base de Diacamma.
+
+    À la toute première initialisation, l'image postgres lance un serveur
+    temporaire qui n'écoute que sur le socket (listen_addresses vide), puis
+    l'arrête. Diacamma, qui passe par ce même socket, doit l'ignorer : sinon
+    il trouverait une base absente, ou serait coupé en pleine création. En TCP,
+    ce serveur temporaire est injoignable : la connexion directe suffit.
+    """
+    import psycopg2
+
+    if params['host'].startswith('/'):
+        conn = psycopg2.connect(**{**params, 'dbname': 'postgres'})
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute('SHOW listen_addresses')
+                if cursor.fetchone()[0] == '':
+                    return False
+        finally:
+            conn.close()
+    psycopg2.connect(**params).close()
+    return True
+
+
 def wait_postgresql(timeout=300):
     """Attend le mot de passe et que PostgreSQL accepte la connexion.
 
@@ -288,6 +312,8 @@ def wait_postgresql(timeout=300):
 
     host = os.environ.get('DIACAMMA_DB_HOST', '')
     port = os.environ.get('DIACAMMA_DB_PORT', '5432')
+    # Dossier du socket (compose depuis 2.7.10-4) ou nom d'hôte.
+    where = f'socket {host}' if host.startswith('/') else f'{host}:{port}'
     # Exportés par bin/diacamma ; ils ne servent qu'aux messages.
     appli = os.environ.get('DIACAMMA_APPLI', 'syndic')
     instance = os.environ.get('DIACAMMA_INSTANCE', appli)
@@ -301,8 +327,9 @@ def wait_postgresql(timeout=300):
     while True:
         try:
             params['password'] = db_password()
-            psycopg2.connect(**params).close()
-            return
+            if postgresql_ready(params):
+                return
+            detail = 'initialisation de la base en cours'
         except OSError as exc:
             detail = f'{exc.filename} : {exc.strerror}'
         except psycopg2.OperationalError as exc:
@@ -315,11 +342,11 @@ def wait_postgresql(timeout=300):
                 fail(f'la base du dossier postgresql/ ne correspond pas à ce projet : {detail}')
         elapsed = time.monotonic() - start
         if elapsed >= timeout:
-            fail(f'la base PostgreSQL ({host}:{port}) ne répond pas après {timeout} s. Consultez le journal '
-                 f'du conteneur diacamma-{appli}-db : le plus souvent, les dossiers postgresql ou secrets '
+            fail(f'la base PostgreSQL ({where}) ne répond pas après {timeout} s. Consultez le journal '
+                 'du conteneur de la base (nom en -db) : le plus souvent, les dossiers postgresql ou secrets '
                  f'n\'ont pas été créés avec File Station (README, « Permissions »). Détail : {detail}')
         if elapsed >= next_log:
-            log(f'En attente de la base PostgreSQL ({host}:{port})…')
+            log(f'En attente de la base PostgreSQL ({where})…')
             next_log += 15
         time.sleep(2)
 

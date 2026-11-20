@@ -41,7 +41,8 @@ x-diacamma: &diacamma
     BACKUP_TIME: ${BACKUP_TIME:-02:30}
     BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-30}
     DIACAMMA_DB_ENGINE: postgresql
-    DIACAMMA_DB_HOST: db
+    # Socket de PostgreSQL (volume db-socket) : aucune connexion réseau.
+    DIACAMMA_DB_HOST: /var/run/postgresql
     DIACAMMA_DB_NAME: diacamma
     DIACAMMA_DB_USER: diacamma
     DIACAMMA_DB_PASSWORD_FILE: /secrets/db_password.txt
@@ -49,9 +50,7 @@ x-diacamma: &diacamma
     - ./data:/data
     - ./backups:/backups
     - ./secrets:/secrets:ro
-  networks:
-    - default
-    - backend
+    - db-socket:/var/run/postgresql:ro
 
 services:
   db:
@@ -85,8 +84,10 @@ services:
     volumes:
       - ./postgresql:/var/lib/postgresql/data
       - ./secrets:/secrets
-    networks:
-      - backend
+      - db-socket:/var/run/postgresql
+    # Aucun réseau : la base n'est joignable que par son socket, partagé avec
+    # Diacamma. Le pare-feu de DSM et les plages d'adresses n'interviennent pas.
+    network_mode: none
     mem_limit: 512m
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "diacamma", "-d", "diacamma"]
@@ -102,6 +103,10 @@ services:
     # Proxy de la box (option B) ou essai en HTTP sur le réseau local : "8100:8000".
     ports:
       - "127.0.0.1:8100:8000"
+    # Réseau « bridge » par défaut de Docker (172.17.0.0/16), pour le port publié
+    # et les courriels sortants : le projet ne crée aucun réseau, et plusieurs
+    # instances cohabitent sans épuiser les plages d'adresses (voir README).
+    network_mode: bridge
     mem_limit: 1g
     # « started » et non « healthy » : si la base ne démarre pas, le projet reste
     # créé et les journaux visibles. L'application attend elle-même la base.
@@ -113,6 +118,8 @@ services:
     <<: *diacamma
     container_name: diacamma-syndic-sauvegarde
     command: ["backup-daemon"]
+    # Aucun réseau : seuls les fichiers et le socket de la base lui servent.
+    network_mode: none
     mem_limit: 512m
     # « started » et non « healthy » : si l'application échoue au démarrage, le
     # projet reste créé et son journal visible dans Container Manager. Le service
@@ -123,7 +130,11 @@ services:
     healthcheck:
       disable: true
 
-networks:
-  # Réseau sans accès extérieur : la base n'est joignable que par Diacamma.
-  backend:
-    internal: true
+volumes:
+  # Socket de PostgreSQL, en mémoire et vide à chaque démarrage. Propre au
+  # projet : chaque instance a le sien.
+  db-socket:
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: "size=1m,mode=1777"

@@ -8,17 +8,23 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/).
 
 Diacamma Asso rejoint le projet. Diacamma Syndic et Lucterios restent en version 2.7.10 : pour les installations existantes, la mise à jour ne lance aucune migration.
 
-**Installations Diacamma Syndic existantes** : rien de particulier, la mise à jour se fait comme d'habitude avec le kit `diacamma-syndic`. L'image change de nom (voir ci-dessous) ; l'ancienne peut être supprimée ensuite.
+**Installations Diacamma Syndic existantes** : la mise à jour se fait comme d'habitude avec le kit `diacamma-syndic`, en prenant bien son `docker-compose.yml` (la base n'a plus de réseau, voir ci-dessous). L'image change de nom ; l'ancienne peut être supprimée ensuite, ainsi que les réseaux `diacamma-syndic_default` et `diacamma-syndic_backend` (Container Manager → Réseau), que « Nettoyer » laisse en place. Pour revenir ensuite à une version antérieure en PostgreSQL, une ligne de `settings.py` est à rétablir (README, « Installations d'avant la version 2.7.10-4 »).
 
 ### Ajouté
 
 - **Diacamma Asso 2.7.10** (gestion d'association : adhérents, cotisations, événements, facturation). Il a son propre kit, `diacamma-asso-<version>.zip`, avec les mêmes garanties que Syndic : PostgreSQL ou SQLite, sauvegardes, durcissement. Son port publié est 8101, pour qu'il puisse fonctionner sur le même NAS que Diacamma Syndic (8100). Le README explique les différences dans la section « Syndic ou Asso ? ».
 - Un kit posé sur les données de l'autre application (Asso sur Syndic, ou l'inverse) est refusé au démarrage, avec un message explicite et sans toucher aux données.
+- Plusieurs copropriétés ou associations sur un même NAS : procédure dans le README (« Plusieurs copropriétés ou associations »).
 
 ### Modifié
 
 - L'image s'appelle désormais `ghcr.io/jegweb/diacamma` : elle contient les deux applications, et le kit choisit laquelle utiliser (`DIACAMMA_APPLI`). Les mêmes versions restent publiées sous l'ancien nom, `ghcr.io/jegweb/diacamma-syndic`.
 - Le dépôt s'appelle désormais `jegweb/diacamma-synology`. Les anciens liens sont redirigés par GitHub.
+- **La base PostgreSQL n'a plus aucun réseau** : Diacamma la joint par son socket, partagé en mémoire entre les conteneurs du projet. Le service de sauvegarde n'a plus de réseau non plus, et Diacamma utilise le réseau « bridge » par défaut de Docker : le projet ne crée plus de réseau. Au premier démarrage, `settings.py` est mis à jour (`Adresse de la base mise à jour dans settings.py`).
+
+### Corrigé
+
+- Diacamma pouvait attendre sa base sans fin (« la base PostgreSQL (db:5432) ne répond pas ») quand le pare-feu de DSM est activé. Chaque projet créait ses propres réseaux Docker, et sur un NAS qui en compte déjà beaucoup, ils pouvaient recevoir une plage d'adresses (`192.168.x`) que le pare-feu bloque. Constaté pendant l'essai de la 2.7.10-4-rc1.
 
 ## [2.7.10-3] - 2026-11-20
 

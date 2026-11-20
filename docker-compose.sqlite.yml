@@ -51,12 +51,18 @@ services:
     # Proxy de la box (option B) ou essai en HTTP sur le réseau local : "8100:8000".
     ports:
       - "127.0.0.1:8100:8000"
+    # Réseau « bridge » par défaut de Docker (172.17.0.0/16), pour le port publié
+    # et les courriels sortants : le projet ne crée aucun réseau, et plusieurs
+    # instances cohabitent sans épuiser les plages d'adresses (voir README).
+    network_mode: bridge
     mem_limit: 1g
 
   sauvegarde:
     <<: *diacamma
     container_name: diacamma-syndic-sauvegarde
     command: ["backup-daemon"]
+    # Aucun réseau : seuls les fichiers lui servent.
+    network_mode: none
     mem_limit: 512m
     # « started » et non « healthy » : si l'application échoue au démarrage, le
     # projet reste créé et son journal visible dans Container Manager. Le service

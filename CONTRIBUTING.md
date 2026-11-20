@@ -40,11 +40,12 @@ Les mises à jour de Syndic partent de l'alias `diacamma-syndic`, que font tourn
 - la connexion, et le refus de `admin`/`admin` ;
 - `/static/settings.py` et `/static/db.sqlite3` en 404, un hôte inconnu en 400 ;
 - la sauvegarde puis la restauration ;
-- en PostgreSQL, la création du mot de passe de la base dans `secrets/` ;
+- les réseaux : l'application sur le réseau `bridge` de Docker, la base et le service de sauvegarde sans réseau, aucun réseau créé par le projet ;
+- en PostgreSQL, la création du mot de passe de la base dans `secrets/`, et la connexion par le socket (`settings.py`) ;
 - avec `--sqlite`, le refus du compose PostgreSQL sur une instance SQLite, puis celui du kit de l'autre application, sans modification de la base.
 
 Les fichiers du projet de test viennent de `scripts/kit.sh`, comme ceux d'un utilisateur : `--asso` teste donc aussi le kit Asso produit.
-Avec `--depuis`, il installe d'abord l'ancienne image, puis passe à la nouvelle, comme un utilisateur qui met à jour. Si les versions des paquets diffèrent, il vérifie la détection de la mise à jour, l'instantané SQLite et les migrations. Sinon, il vérifie qu'aucune migration n'est lancée.
+Avec `--depuis`, il installe d'abord l'ancienne image avec le kit de sa version (fichiers de l'étiquette Git `v<version>`, qui doit être présente localement), puis passe au nouveau kit et à la nouvelle image, comme un utilisateur qui met à jour. Si les versions des paquets diffèrent, il vérifie la détection de la mise à jour, l'instantané SQLite et les migrations. Sinon, il vérifie qu'aucune migration n'est lancée.
 
 L'intégration continue lance ces contrôles sur chaque pull request, mise à jour comprise. La construction de l'image vérifie aussi la cohérence du verrou avec `pip check`.
 
@@ -56,7 +57,7 @@ docker exec -w /project dind24 docker compose pull
 docker exec -w /project dind24 docker compose up -d
 ```
 
-Si vous le pouvez, testez enfin sur un vrai NAS : Container Manager a ses propres comportements (voir CLAUDE.md).
+Si vous le pouvez, testez enfin sur un vrai NAS : Container Manager a ses propres comportements (voir CLAUDE.md). **Ne reliez jamais deux conteneurs par le réseau** et ne faites pas créer de réseau au projet : le pare-feu de DSM peut bloquer les plages que Docker attribue (voir CLAUDE.md, « Contraintes propres à Synology »).
 
 ## Publier une version (mainteneurs)
 
@@ -68,7 +69,7 @@ Les versions s'écrivent `X.Y.Z-N` (voir [CHANGELOG.md](CHANGELOG.md)).
 2. Remplacez le tag de l'image dans `docker-compose.yml` **et** `docker-compose.sqlite.yml`, ainsi que dans l'exemple de `docker build` du README.
 3. Ajoutez l'entrée `## [X.Y.Z-N]` au CHANGELOG.
 4. Testez (voir plus haut), commitez, puis poussez une pré-version : `git tag vX.Y.Z-N-rc1 && git push origin vX.Y.Z-N-rc1`.
-5. Le workflow « Publication » vérifie la cohérence de l'étiquette, des compose, du verrou et du CHANGELOG. Il construit et teste l'image sur amd64 et arm64 (Syndic et Asso), la publie sur ghcr.io et crée une Release marquée comme pré-version, avec un kit par application. Testez les deux kits sur un NAS : ils tiennent côte à côte grâce à leurs ports différents.
+5. Le workflow « Publication » vérifie la cohérence de l'étiquette, des compose, du verrou et du CHANGELOG. Il construit et teste l'image sur amd64 et arm64 (Syndic et Asso), la publie sur ghcr.io et crée une Release marquée comme pré-version, avec un kit par application. Testez les deux kits sur un NAS, côte à côte grâce à leurs ports différents, et de préférence avec le pare-feu de DSM activé : connexion par le portail Web Station, courriel de test, sauvegarde.
 6. Publiez la version définitive : `git tag vX.Y.Z-N && git push origin vX.Y.Z-N`. Les tags d'image `X.Y.Z-N`, `X.Y.Z` et `latest` sont publiés, sous `ghcr.io/jegweb/diacamma` et sous l'alias `ghcr.io/jegweb/diacamma-syndic`. La Release est aussi annoncée par une discussion dans la catégorie « Annonces ». Si vous renommez cette catégorie, mettez à jour la variable `ANNONCES` de `release.yml` ; sinon la Release est créée sans annonce, avec un avertissement.
 
 **Correctifs de sécurité.** Chaque lundi, le workflow « Failles de sécurité » (`scan.yml`) analyse l'image publiée (`latest`) avec Trivy. Il échoue s'il trouve une faille HIGH ou CRITICAL déjà corrigée en amont, et GitHub vous envoie alors un courriel. Publiez dans ce cas une révision `-N+1` :

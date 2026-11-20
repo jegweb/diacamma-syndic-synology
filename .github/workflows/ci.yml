@@ -37,6 +37,9 @@ jobs:
         variant: [postgresql, sqlite, mise-a-jour, mise-a-jour-sqlite, asso, mise-a-jour-asso]
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Étiquettes Git : le test de mise à jour part du kit de l'ancienne version.
+          fetch-depth: 0
       - uses: docker/setup-buildx-action@v4
       - name: Construction de l'image
         uses: docker/build-push-action@v7

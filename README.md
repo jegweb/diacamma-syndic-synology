@@ -51,6 +51,21 @@ Les deux applications utilisent la même image. Chacune a son kit, qui fixe l'ap
 - Un kit posé sur les données de l'autre application est refusé au démarrage, sans toucher aux données.
 - Une archive `.lbk` se restaure dans la même application : une archive de Diacamma Syndic ne passe pas dans Diacamma Asso.
 
+### Plusieurs copropriétés ou associations
+
+Chaque copropriété ou association a sa propre installation : un projet, un dossier, ses données et sa base. Les projets ne partagent rien. La base de chacun n'a aucun réseau, et aucun projet ne crée de réseau Docker (voir [Fonctionnement](#fonctionnement)) : leur nombre est limité seulement par la mémoire du NAS. Au repos, une installation en PostgreSQL occupe environ 200 Mo : 130 Mo pour l'application, 30 Mo pour la base, presque rien pour le service de sauvegarde. Comptez davantage pendant les impressions, les envois de courriels et les sauvegardes.
+
+Pour une deuxième copropriété :
+
+1. Créez le dossier `docker/diacamma-syndic-2`, avec ses sous-dossiers `data`, `backups`, `postgresql` et `secrets`. Copiez-y les fichiers du kit et un `.env` propre à cette copropriété (nom de domaine, mot de passe administrateur).
+2. Ouvrez `docker-compose.yml` dans un éditeur de texte :
+   - remplacez **partout** `diacamma-syndic` par `diacamma-syndic-2` (« Remplacer tout »). Cela change le nom du projet (ligne `name:`) et ceux des trois conteneurs. N'oubliez pas la ligne `name:` : avec le même nom de projet, Docker prendrait les conteneurs de la première copropriété pour ceux de la nouvelle et les remplacerait ;
+   - remplacez `8100` par un port libre, par exemple `8102`.
+3. Créez le projet `diacamma-syndic-2` dans Container Manager, puis son portail Web Station, avec son propre nom de domaine, vers ce port.
+4. Dans `.env`, décalez l'heure de sauvegarde (`BACKUP_TIME`, par exemple `03:00`), pour que les sauvegardes ne tournent pas en même temps.
+
+L'instance garde le nom `syndic`, dans le dossier `data/` de son propre projet. Si un nom de conteneur ou le port est resté identique, la création du projet échoue (« already in use », « port is already allocated ») sans toucher à l'autre installation. À chaque mise à jour, refaites ces remplacements dans le `docker-compose.yml` du nouveau kit, ou changez seulement le numéro de version de la ligne `image:`. Même principe pour une deuxième association : `diacamma-asso-2`, et un autre port libre.
+
 ## Fonctionnement
 
 Le projet lance trois conteneurs : deux à partir de l'image Diacamma, et la base de données.
@@ -59,7 +74,9 @@ Le projet lance trois conteneurs : deux à partir de l'image Diacamma, et la bas
 | --- | --- |
 | `diacamma-syndic` | L'application web (gunicorn). Au démarrage, il crée l'instance ou la met à jour (migrations, fichiers statiques). |
 | `diacamma-syndic-sauvegarde` | Crée chaque nuit une archive Diacamma (`.lbk`) et supprime les plus anciennes. |
-| `diacamma-syndic-db` | La base PostgreSQL (image officielle `postgres:17`), joignable seulement par les deux autres conteneurs. |
+| `diacamma-syndic-db` | La base PostgreSQL (image officielle `postgres:17`), sans aucun réseau : les deux autres conteneurs la joignent par son socket, un fichier de connexion partagé en mémoire. |
+
+Seul `diacamma-syndic` a un réseau, le réseau « bridge » par défaut de Docker (`172.17.0.0/16`), pour le portail web et l'envoi des courriels. Le projet ne crée pas de réseau Docker. Ainsi, plusieurs installations n'épuisent pas les plages d'adresses du NAS, et le pare-feu de DSM ne peut pas couper Diacamma de sa base.
 
 Les données se trouvent dans quatre dossiers du projet sur le NAS :
 
@@ -287,7 +304,17 @@ Les versions s'écrivent `X.Y.Z-N` : `X.Y.Z` est la version de Diacamma (Syndic 
 
 Depuis la version 2.7.10-4, l'image s'appelle `ghcr.io/jegweb/diacamma`, car elle contient aussi Diacamma Asso. Il n'y a rien de particulier à faire : le nouveau kit utilise ce nom, et la mise à jour se déroule comme ci-dessus. Depuis une version 2.7.10-1 à 2.7.10-3, Diacamma Syndic reste en version 2.7.10 : le conteneur n'applique aucune migration. Supprimez ensuite l'ancienne image `ghcr.io/jegweb/diacamma-syndic` (étape 5).
 
-L'ancien nom reste publié avec les mêmes versions : un `docker-compose.yml` dont on change seulement le numéro de version continue de fonctionner.
+L'ancien nom reste publié avec les mêmes versions.
+
+Depuis 2.7.10-4, la base n'a plus de réseau : Diacamma la joint par son socket. **Prenez donc le `docker-compose.yml` du nouveau kit** ; ne vous contentez pas de changer le numéro de version dans l'ancien. Au premier démarrage, le journal indique `Adresse de la base mise à jour dans settings.py : /var/run/postgresql`. Les réseaux `diacamma-syndic_default` et `diacamma-syndic_backend` des versions précédentes ne servent plus, mais « Nettoyer » ne les supprime pas : supprimez-les ensuite dans **Container Manager** → **Réseau**.
+
+**Revenir à une version d'avant 2.7.10-4 (PostgreSQL)** : l'ancienne version ne connaît pas le socket. Arrêtez le projet, remettez l'ancien `docker-compose.yml`, puis rendez à `settings.py` l'ancienne adresse de la base. En SSH, depuis le dossier du projet :
+
+```sh
+sudo sed -i 's|"HOST": "/var/run/postgresql",|"HOST": "db",|' data/syndic/settings.py
+```
+
+Ensuite, **Nettoyer** et **Créer**. Sans cette commande, l'ancienne version redémarre en boucle, sans toucher aux données (voir [Dépannage](#dépannage)). Avec SQLite, il suffit de remettre l'ancien fichier.
 
 ### Installations d'avant la version 2.7.10-3
 
@@ -344,7 +371,7 @@ Au premier démarrage, le conteneur `diacamma-syndic-db` crée un mot de passe a
 
 Vous n'avez pas à le connaître ni à le noter. Il ne sert qu'entre Diacamma et sa base, jamais pour se connecter à Diacamma, et les archives `.lbk` n'en ont pas besoin. Laissez simplement le fichier en place : s'il disparaît, la base refuse de démarrer. Diacamma en garde une copie dans `data/syndic/settings.py`, qui permet de le recréer (voir [Dépannage](#dépannage)).
 
-La base n'est joignable que par Diacamma, sur un réseau Docker interne sans accès extérieur.
+La base n'a aucun accès réseau. Seuls les conteneurs du projet la joignent, par son socket : un fichier de connexion partagé en mémoire (volume `db-socket`, propre au projet). Par ce socket, PostgreSQL ne vérifie pas le mot de passe : c'est l'absence de réseau qui protège la base. Le mot de passe ne serait exigé que pour une connexion par le réseau.
 
 ### Variante SQLite
 
@@ -413,9 +440,11 @@ Un démarrage normal se termine par `[diacamma] Démarrage de Diacamma Syndic (�
 | Le conteneur redémarre en boucle | Lisez son journal. Le message commence par `[diacamma] ERREUR`. |
 | « l'instance existante utilise SQLite, mais ce docker-compose.yml est celui de PostgreSQL » | Votre installation est en SQLite et le `docker-compose.yml` du kit a remplacé le vôtre. Prenez `docker-compose.sqlite.yml`, renommez-le en `docker-compose.yml`, puis **Nettoyer** et **Créer**. Supprimez les dossiers `postgresql` et `secrets` s'ils ont été créés. Pour passer à PostgreSQL, voir [Changer de base de données](#changer-de-base-de-données). |
 | « … mais ce kit est celui de Diacamma Asso » (ou de Diacamma Syndic) | Le dossier contient les données de l'autre application : le kit n'est pas le bon. Remettez le `docker-compose.yml` du kit de votre application, puis **Nettoyer** et **Créer**. Pour installer la seconde application à côté, créez un projet séparé (voir [Syndic ou Asso ?](#syndic-ou-asso-)). Les données n'ont pas été modifiées. |
-| « En attente de la base PostgreSQL » qui se répète, puis « la base PostgreSQL … ne répond pas » | Lisez le journal de `diacamma-syndic-db`. Le plus souvent, `postgresql` ou `secrets` ont été créés par Docker et appartiennent à `root` (voir [Permissions](#permissions-puidpgid)). |
+| « En attente de la base PostgreSQL » qui se répète, puis « la base PostgreSQL … ne répond pas » | Lisez le journal de `diacamma-syndic-db`. Le plus souvent, `postgresql` ou `secrets` ont été créés par Docker et appartiennent à `root` (voir [Permissions](#permissions-puidpgid)). Si le message cite `db:5432` au lieu de `socket /var/run/postgresql`, le `docker-compose.yml` est celui d'une version d'avant 2.7.10-4 : prenez celui du kit. |
+| « connection to server on socket "/var/run/postgresql/.s.PGSQL.5432" failed: No such file or directory » en boucle | Une version d'avant 2.7.10-4 a été remise sur une installation déjà passée en 2.7.10-4 : rétablissez l'ancienne adresse de la base (voir [Installations d'avant la version 2.7.10-4](#installations-davant-la-version-2710-4)). Sinon, le `docker-compose.yml` n'est pas celui du kit. |
+| Les courriels ne partent pas (délai dépassé), alors que le pare-feu de DSM est activé | Le pare-feu doit laisser passer le réseau « bridge » de Docker : une règle qui autorise la source `172.17.0.0`, masque `255.255.0.0` (ou `172.16.0.0/12`, qui couvre tous les réseaux Docker en `172.x`). |
+| Les courriels ne partent pas : nom du serveur de courriel introuvable (« Name or service not known ») | Sur le réseau « bridge », Diacamma reçoit les serveurs DNS du NAS. Si le NAS se sert de lui-même comme DNS (`127.0.0.1`, paquet DNS Server), Docker les remplace par des DNS publics, qui ne connaissent pas les noms du réseau local. Indiquez dans Diacamma l'adresse IP du serveur de courriel, ou un nom public. |
 | « [diacamma-db] ERREUR : la base existe déjà dans postgresql/, mais secrets/db_password.txt manque » | Le fichier a été supprimé. Recréez-le à partir de la copie gardée par Diacamma. En SSH, depuis le dossier du projet : `sudo grep -o '"PASSWORD": "[^"]*' data/syndic/settings.py \| cut -d'"' -f4 \| sudo tee secrets/db_password.txt >/dev/null`, puis `sudo chown 1026:100 secrets/db_password.txt && sudo chmod 600 secrets/db_password.txt` (vos `PUID:PGID`). Redémarrez ensuite le projet. |
-| « PostgreSQL refuse le mot de passe de secrets/db_password.txt » | Le fichier a été remplacé ou modifié après la création de la base. Recréez-le comme dans la ligne précédente. |
 | « LegalEntity matching query does not exist » à chaque connexion, après une restauration | La restauration a été interrompue, le plus souvent par un redémarrage du conteneur pendant qu'elle tournait : la base est vide. Relancez-la en SSH, `sudo docker exec diacamma-syndic diacamma restore <archive>.lbk`, attendez `[diacamma] Restauration terminée`, puis redémarrez le conteneur. |
 | Dans le journal de `diacamma-syndic-db` : « relation "CORE_parameter" does not exist » ou « the database system is starting up » au premier démarrage, « chmod: changing permissions of '/run/postgresql': Operation not permitted », ou « violates foreign key constraint » pendant une restauration | Sans conséquence. Lucterios interroge ses paramètres avant de créer les tables, et vide les tables sans tenir compte de leur ordre avant une restauration (PostgreSQL signale chaque tentative refusée). La base tourne sans droits root, dans un dossier déjà accessible. |
 | « SyntaxWarning: invalid escape sequence » ou « Your models in app(s): … have changes that are not yet reflected in a migration » à chaque démarrage | Sans conséquence : ces messages viennent du code de Diacamma et Lucterios eux-mêmes. Ne lancez pas `makemigrations`. |
@@ -430,7 +459,8 @@ Un démarrage normal se termine par `[diacamma] Démarrage de Diacamma Syndic (�
 Ce que fait le projet :
 
 - Le compte `admin`/`admin` est remplacé dès le premier démarrage par un mot de passe aléatoire ou par celui fourni.
-- La base PostgreSQL n'est joignable que par Diacamma, sur un réseau Docker interne. Son mot de passe est aléatoire, créé au premier démarrage, et n'apparaît ni dans le compose ni dans `.env`.
+- La base PostgreSQL n'a aucun accès réseau : seuls Diacamma et le service de sauvegarde, lui aussi sans réseau, la joignent par son socket, dans un volume propre au projet. C'est ce qui la protège : par le socket, PostgreSQL ne vérifie pas le mot de passe. Ce mot de passe aléatoire, créé au premier démarrage, ne serait exigé que pour une connexion par le réseau ; il n'apparaît ni dans le compose ni dans `.env`.
+- Diacamma est sur le réseau « bridge » de Docker : les autres conteneurs de ce réseau peuvent atteindre son port web, qui demande une connexion, mais pas la base.
 - Le mode débogage de Django est désactivé, alors que c'est le réglage par défaut de Lucterios.
 - Les noms d'hôte autorisés sont contrôlés, et le cookie de session est marqué `Secure`, `HttpOnly` et `SameSite=Lax`.
 - L'application n'est exposée que sur `127.0.0.1`, derrière le proxy inverse HTTPS de DSM (option A, réglage par défaut).
