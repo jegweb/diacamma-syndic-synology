@@ -1,7 +1,8 @@
 # Paquets de premier niveau. Les versions exactes (dépendances comprises)
 # sont figées dans requirements.lock, généré par scripts/update-lock.sh.
 
-# Diacamma Syndic et le framework Lucterios.
+# Diacamma Syndic, Diacamma Asso et le framework Lucterios. Les deux
+# applications sortent ensemble, avec le même numéro de version.
 # lucterios-standard est requis par lucterios_admin (setup_from_none).
 lucterios~=2.7.0
 lucterios-standard~=2.7.0
@@ -9,6 +10,7 @@ lucterios-contacts~=2.7.0
 lucterios-documents~=2.7.0
 diacamma-financial~=2.7.0
 diacamma-syndic~=2.7.0
+diacamma-asso~=2.7.0
 
 # Serveur WSGI, fichiers statiques et pilote PostgreSQL (variante optionnelle).
 # gunicorn 27.0 date du 10/11/2026 : voir les plafonds ci-dessous.

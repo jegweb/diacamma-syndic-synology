@@ -6,12 +6,21 @@ body:
       value: |
         Décrivez votre situation : quelqu'un de la communauté ou le mainteneur vous répondra.
         **Masquez votre nom de domaine, vos adresses IP publiques et tout mot de passe** (remplacez-les par `syndic.mondomaine.fr`, `x.x.x.x`, `***`).
-        Pour l'utilisation de Diacamma elle-même (comptabilité, appels de fonds…), le [forum Diacamma](https://forum.diacamma.org) est plus adapté.
+        Pour l'utilisation de Diacamma elle-même (comptabilité, appels de fonds, adhésions…), le [forum Diacamma](https://forum.diacamma.org) est plus adapté.
   - type: textarea
     id: question
     attributes:
       label: Votre question
       description: Ce que vous cherchez à faire, ce que vous avez essayé, ce qui se passe.
+    validations:
+      required: true
+  - type: dropdown
+    id: application
+    attributes:
+      label: Application
+      options:
+        - Diacamma Syndic
+        - Diacamma Asso
     validations:
       required: true
   - type: input
@@ -43,11 +52,11 @@ body:
     id: version
     attributes:
       label: Version de l'image
-      description: "La fin de la ligne `image:` de votre docker-compose.yml, ou la sortie de `sudo docker exec diacamma-syndic diacamma version`."
+      description: "La fin de la ligne `image:` de votre docker-compose.yml, ou la sortie de `sudo docker exec diacamma-syndic diacamma version` (`diacamma-asso` pour Asso)."
       placeholder: "ex. 2.7.10-1"
   - type: textarea
     id: journal
     attributes:
       label: Extrait du journal (facultatif)
-      description: Container Manager → Conteneur → double-clic sur diacamma-syndic → onglet Journal. Les lignes `[diacamma]` suffisent souvent.
+      description: Container Manager → Conteneur → double-clic sur diacamma-syndic (ou diacamma-asso) → onglet Journal. Les lignes `[diacamma]` suffisent souvent.
       render: text

@@ -1,4 +1,5 @@
-# Image Diacamma Syndic pour Synology Container Manager (amd64 et arm64).
+# Image Diacamma pour Synology Container Manager (amd64 et arm64). Elle contient
+# Diacamma Syndic et Diacamma Asso ; DIACAMMA_APPLI choisit l'application.
 # Debian trixie est requis : les roues aarch64 de certaines dépendances
 # demandent glibc >= 2.39.
 ARG PYTHON_IMAGE=python:3.13-slim-trixie
@@ -10,6 +11,9 @@ COPY requirements.lock /tmp/requirements.lock
 # --no-deps : le verrou est complet et exclut volontairement PyQt6.
 # pip check : arrête la construction si le verrou viole une exigence déclarée
 # par un paquet (seule l'absence de PyQt6 est attendue).
+# build-id/<appli> : versions des paquets de chaque application. Une mise à
+# jour d'Asso seule ne déclenche donc pas de migration chez Syndic, et
+# inversement. Le format de Syndic est celui de l'ancien diacamma-build-id.
 # pip est ensuite retiré du venv : il ne sert pas à l'exécution (seuls
 # « lucterios_admin check/update » l'appellent, et les mises à jour passent par
 # l'image), et ses bibliothèques embarquées (urllib3, msgpack, setuptools) ont
@@ -22,7 +26,10 @@ RUN python -m venv /opt/venv \
     fi \
  && /opt/venv/bin/python -m compileall -q -j 0 /opt/venv \
  && /opt/venv/bin/pip freeze > /opt/venv/versions.txt \
- && /opt/venv/bin/python -c "import importlib.metadata as m; print('-'.join(m.version(p) for p in ('diacamma-syndic', 'diacamma-financial', 'lucterios', 'lucterios-contacts', 'lucterios-documents')))" > /opt/venv/diacamma-build-id \
+ && mkdir /opt/venv/build-id \
+ && for appli in syndic asso; do \
+      /opt/venv/bin/python -c "import importlib.metadata as m, sys; print('-'.join(m.version(p) for p in ('diacamma-' + sys.argv[1], 'diacamma-financial', 'lucterios', 'lucterios-contacts', 'lucterios-documents')))" "$appli" > "/opt/venv/build-id/$appli" || exit 1; \
+    done \
  && /opt/venv/bin/python -m pip uninstall -y -q pip
 
 FROM ${PYTHON_IMAGE}
@@ -45,7 +52,7 @@ COPY --from=builder /opt/venv /opt/venv
 COPY docker/ /opt/diacamma/
 RUN chmod 0755 /opt/diacamma/bin/* \
  && ln -s /opt/diacamma/bin/diacamma /usr/local/bin/diacamma \
- && mv /opt/venv/diacamma-build-id /opt/venv/versions.txt /opt/diacamma/ \
+ && mv /opt/venv/build-id /opt/venv/versions.txt /opt/diacamma/ \
  && install -d -o 1026 -g 100 -m 0700 /data /backups
 
 ENV PATH=/opt/venv/bin:$PATH \
@@ -72,9 +79,9 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=15m --retries=3 \
 # pas invalider le cache des étapes précédentes.
 ARG VERSION=dev
 ENV DIACAMMA_IMAGE_VERSION=${VERSION}
-LABEL org.opencontainers.image.title="Diacamma Syndic pour Synology" \
-      org.opencontainers.image.description="Diacamma Syndic (gestion de copropriété) pour Synology Container Manager. Projet communautaire non officiel." \
-      org.opencontainers.image.source="https://github.com/jegweb/diacamma-syndic-synology" \
+LABEL org.opencontainers.image.title="Diacamma pour Synology (Syndic et Asso)" \
+      org.opencontainers.image.description="Diacamma Syndic (copropriété) et Diacamma Asso (association) pour Synology Container Manager. Projet communautaire non officiel." \
+      org.opencontainers.image.source="https://github.com/jegweb/diacamma-synology" \
       org.opencontainers.image.licenses="GPL-3.0-or-later" \
       org.opencontainers.image.version="${VERSION}"
 

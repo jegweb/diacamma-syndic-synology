@@ -1,6 +1,6 @@
 # Intégration continue : lint, construction de l'image et test de fumée
-# (PostgreSQL et SQLite). Chaque mois, reconstruction sans cache avec l'image
-# de base Python/Debian à jour, pour repérer tôt une casse.
+# (Syndic et Asso, PostgreSQL et SQLite). Chaque mois, reconstruction sans
+# cache avec l'image de base Python/Debian à jour, pour repérer tôt une casse.
 name: CI
 
 on:
@@ -33,7 +33,8 @@ jobs:
       matrix:
         # mise-a-jour : installe la dernière version publiée, puis passe à
         # l'image construite (détection de la mise à jour, instantané, migrations).
-        variant: [postgresql, sqlite, mise-a-jour, mise-a-jour-sqlite]
+        # asso : kit Diacamma Asso (les autres variantes testent Syndic).
+        variant: [postgresql, sqlite, mise-a-jour, mise-a-jour-sqlite, asso, mise-a-jour-asso]
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
@@ -45,17 +46,29 @@ jobs:
           pull: true
           no-cache: ${{ github.event_name == 'schedule' }}
           build-args: VERSION=ci
-          tags: diacamma-syndic:ci
+          tags: diacamma:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Test de fumée
         env:
           VARIANT: ${{ matrix.variant }}
         run: |
-          published="$(sed -nE 's/^ *image: *([^ :]*diacamma-syndic):.*/\1/p' docker-compose.yml | head -n 1):latest"
+          image="$(sed -nE 's/^ *image: *([^ :]*\/diacamma):.*/\1/p' docker-compose.yml | head -n 1)"
+          # Les installations Syndic existantes partent de l'alias -syndic, seul
+          # nom de l'image avant 2.7.10-4 et toujours publié.
+          syndic="$image-syndic:latest"
           case "$VARIANT" in
-            sqlite) scripts/smoke-test.sh --sqlite diacamma-syndic:ci ;;
-            mise-a-jour) scripts/smoke-test.sh --depuis "$published" diacamma-syndic:ci ;;
-            mise-a-jour-sqlite) scripts/smoke-test.sh --sqlite --depuis "$published" diacamma-syndic:ci ;;
-            *) scripts/smoke-test.sh diacamma-syndic:ci ;;
+            sqlite) scripts/smoke-test.sh --sqlite diacamma:ci ;;
+            mise-a-jour) scripts/smoke-test.sh --depuis "$syndic" diacamma:ci ;;
+            mise-a-jour-sqlite) scripts/smoke-test.sh --sqlite --depuis "$syndic" diacamma:ci ;;
+            asso) scripts/smoke-test.sh --asso diacamma:ci ;;
+            mise-a-jour-asso)
+              if docker pull -q "$image:latest" >/dev/null 2>&1 \
+                && docker run --rm --entrypoint test "$image:latest" -e /opt/diacamma/build-id/asso; then
+                scripts/smoke-test.sh --asso --depuis "$image:latest" diacamma:ci
+              else
+                echo "::notice::$image:latest absente ou sans Diacamma Asso : installation neuve à la place."
+                scripts/smoke-test.sh --asso --sqlite diacamma:ci
+              fi ;;
+            *) scripts/smoke-test.sh diacamma:ci ;;
           esac

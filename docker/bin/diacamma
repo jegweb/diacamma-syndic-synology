@@ -1,28 +1,44 @@
 #!/bin/bash
-# Point d'entrée et outil d'administration du conteneur Diacamma Syndic.
+# Point d'entrée et outil d'administration du conteneur Diacamma (Syndic ou
+# Asso, selon DIACAMMA_APPLI, fixé dans le compose de chaque kit).
 # Usage : diacamma <commande> [arguments]   (voir « diacamma help »)
 set -Eeuo pipefail
 umask 0077
 
+log() { printf '[diacamma] %s\n' "$*" >&2; }
+die() { log "ERREUR : $*"; exit 1; }
+
 readonly DATA_DIR=/data
 readonly BACKUP_DIR=/backups
 readonly LIB_DIR=/opt/diacamma/lib
-readonly INSTANCE="${DIACAMMA_INSTANCE:-syndic}"
+# Défaut syndic : les compose d'avant 2.7.10-4 ne fixent pas DIACAMMA_APPLI.
+readonly APPLICATION="${DIACAMMA_APPLI:-syndic}"
+# Modules de chaque application : ceux du paquet YunoHost de l'auteur de
+# Diacamma, identiques à diacamma.<appli>.link().
+case "$APPLICATION" in
+  syndic)
+    readonly APPLI=diacamma.syndic NOM="Diacamma Syndic"
+    readonly MODULES=lucterios.contacts,lucterios.documents,lucterios.mailing,diacamma.accounting,diacamma.payoff,diacamma.condominium
+    ;;
+  asso)
+    readonly APPLI=diacamma.asso NOM="Diacamma Asso"
+    readonly MODULES=lucterios.contacts,lucterios.documents,lucterios.mailing,diacamma.accounting,diacamma.payoff,diacamma.invoice,diacamma.member,diacamma.event
+    ;;
+  *) die "DIACAMMA_APPLI doit valoir syndic ou asso (reçu : « $APPLICATION »)." ;;
+esac
+readonly INSTANCE="${DIACAMMA_INSTANCE:-$APPLICATION}"
 readonly INSTANCE_DIR="$DATA_DIR/$INSTANCE"
 readonly SETTINGS="$INSTANCE_DIR/settings.py"
-readonly APPLI=diacamma.syndic
-readonly MODULES=lucterios.contacts,lucterios.documents,lucterios.mailing,diacamma.accounting,diacamma.payoff,diacamma.condominium
-# Identifiant des versions installées dans l'image ; recopié dans /data une
-# fois les migrations et collectstatic réussis.
-BUILD_ID="$(cat /opt/diacamma/diacamma-build-id)"
+# Identifiant des versions installées dans l'image pour cette application ;
+# recopié dans /data une fois les migrations et collectstatic réussis.
+BUILD_ID="$(cat "/opt/diacamma/build-id/$APPLICATION")"
 readonly BUILD_ID
 readonly BUILD_MARKER="$DATA_DIR/.diacamma-build-id"
 
 # Utilisé par gunicorn et par les archives lancées depuis l'interface.
 export DJANGO_SETTINGS_MODULE="$INSTANCE.settings"
-
-log() { printf '[diacamma] %s\n' "$*" >&2; }
-die() { log "ERREUR : $*"; exit 1; }
+# Lus par diacamma_docker.py pour ses messages.
+export DIACAMMA_APPLI="$APPLICATION" DIACAMMA_INSTANCE="$INSTANCE"
 
 # lucterios_admin affiche la chaîne de connexion à la base, mot de passe
 # compris (« database postgresql (…, password=…) ») : on le masque.
@@ -69,6 +85,28 @@ check_writable() {
   # Fichiers laissés par une tentative précédente (autre UID, ACL…).
   for path in "$INSTANCE_DIR" "$INSTANCE_DIR/db.sqlite3"; do
     [[ ! -e "$path" || -w "$path" ]] || permission_error "$path"
+  done
+}
+
+# Kit de l'autre application posé sur ces données (Asso sur Syndic ou
+# l'inverse) : refus avant tout contact avec la base. Sans ce contrôle, Asso
+# créerait sa propre instance dans la base PostgreSQL de Syndic.
+check_appli() {
+  local found other
+  local conseil="Pour installer $NOM à côté d'une autre application Diacamma, créez un projet séparé, dans son propre dossier (README, « Syndic ou Asso ? »). Vos données n'ont pas été modifiées."
+  if [[ -f "$SETTINGS" ]]; then
+    found="$(sed -nE 's/^fill_appli_settings\("([^"]+)".*/\1/p' "$SETTINGS" 2>/dev/null | head -n 1 || true)"
+    [[ -z "$found" || "$found" == "$APPLI" ]] && return 0
+    case "$found" in
+      diacamma.syndic) found="Diacamma Syndic" ;;
+      diacamma.asso) found="Diacamma Asso" ;;
+    esac
+    die "l'instance « $INSTANCE » de ce dossier data est une instance $found, mais ce kit est celui de $NOM. $conseil"
+  fi
+  for other in "$DATA_DIR"/manage_*.py; do
+    [[ -e "$other" && "$other" != "$DATA_DIR/manage_$INSTANCE.py" ]] || continue
+    other="${other##*/manage_}"
+    die "ce dossier data contient déjà l'instance « ${other%.py} », mais ce kit est celui de $NOM. Vous avez sans doute pris le kit d'une autre application. $conseil"
   done
 }
 
@@ -172,6 +210,7 @@ serve() {
   [[ "$timeout" =~ ^[1-9][0-9]*$ ]] || die "GUNICORN_TIMEOUT doit être un entier positif."
   check_instance_name
   check_writable
+  check_appli
   extra="$(helper extra-settings)"
   if [[ -f "$SETTINGS" ]]; then
     update_instance "$extra"
@@ -182,7 +221,7 @@ serve() {
   collect_static
   chmod 0600 "$SETTINGS"
   echo "$BUILD_ID" > "$BUILD_MARKER"
-  log "Démarrage de Diacamma Syndic ($BUILD_ID, image ${DIACAMMA_IMAGE_VERSION:-inconnue})."
+  log "Démarrage de $NOM ($BUILD_ID, image ${DIACAMMA_IMAGE_VERSION:-inconnue})."
   # Un seul processus : le planificateur interne (envoi des courriels par
   # lots, archives, clôtures) vit dans le processus web.
   exec gunicorn diacamma_wsgi:application \
@@ -260,6 +299,7 @@ restore() {
 }
 
 usage() {
+  echo "$NOM (instance « $INSTANCE »)"
   cat <<'EOF'
 Usage : diacamma <commande> [arguments]
 
@@ -282,7 +322,7 @@ case "$command" in
   backup-daemon) backup_daemon ;;
   restore) restore "$@" ;;
   reset-admin-password) require_ready; helper reset-admin-password "$INSTANCE" ;;
-  version) echo "Image : ${DIACAMMA_IMAGE_VERSION:-inconnue}"; echo "Build : $BUILD_ID"; grep -iE '^(diacamma|lucterios|django)' /opt/diacamma/versions.txt ;;
+  version) echo "Application : $NOM (instance « $INSTANCE »)"; echo "Image : ${DIACAMMA_IMAGE_VERSION:-inconnue}"; echo "Build : $BUILD_ID"; grep -iE '^(diacamma|lucterios|django)' /opt/diacamma/versions.txt ;;
   manage) manage "$@" ;;
   admin) lucterios_admin "$@" ;;
   help|-h|--help) usage ;;

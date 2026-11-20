@@ -1,36 +1,55 @@
-# Diacamma Syndic sur NAS Synology (Container Manager)
+# Diacamma Syndic et Diacamma Asso sur NAS Synology (Container Manager)
 
 > **Projet communautaire non officiel**, sans lien avec l'équipe de Diacamma. Signalez ici les problèmes du conteneur et de l'installation, et ceux de l'application elle-même sur le [forum Diacamma](https://forum.diacamma.org).
 
-Ce projet fournit de quoi déployer [Diacamma Syndic](https://www.diacamma.org) (gestion de copropriété, logiciel libre GPL) dans **Container Manager** sur un NAS Synology : une image Docker prête à l'emploi (Intel/AMD et ARM 64 bits), un projet Compose et des sauvegardes automatiques. Toutes les fonctions de l'application sont conservées : comptabilité, appels de fonds, documents, courriels, impressions PDF, archives et restauration depuis l'interface.
+Ce projet fournit de quoi déployer [Diacamma](https://www.diacamma.org) (logiciel libre GPL) dans **Container Manager** sur un NAS Synology, pour ses deux applications : **Diacamma Syndic** (gestion de copropriété) et **Diacamma Asso** (gestion d'association). Il comprend une image Docker prête à l'emploi (Intel/AMD et ARM 64 bits), un projet Compose par application et des sauvegardes automatiques. Toutes les fonctions sont conservées : comptabilité, appels de fonds ou adhésions et cotisations, documents, courriels, impressions PDF, archives et restauration depuis l'interface.
 
-Versions incluses : Diacamma Syndic 2.7.10 et Lucterios 2.7.10, sur Python 3.13 (Debian 13 « trixie »). Les dépendances sont figées dans `requirements.lock`. L'image est publiée sur `ghcr.io/jegweb/diacamma-syndic` ; les nouveautés sont dans le [journal des modifications](CHANGELOG.md).
+Versions incluses : Diacamma Syndic 2.7.10, Diacamma Asso 2.7.10 et Lucterios 2.7.10, sur Python 3.13 (Debian 13 « trixie »). Les dépendances sont figées dans `requirements.lock`. L'image, commune aux deux applications, est publiée sur `ghcr.io/jegweb/diacamma` ; les nouveautés sont dans le [journal des modifications](CHANGELOG.md).
 
 ## Démarrage rapide
 
-1. Téléchargez le kit `diacamma-syndic-<version>.zip` de la [dernière version](https://github.com/jegweb/diacamma-syndic-synology/releases/latest). N'utilisez pas les fichiers affichés sur la page du dépôt : ils peuvent viser une version en préparation, pas encore publiée.
-2. Décompressez-le dans `docker/diacamma-syndic` sur le NAS. Créez-y les dossiers `data`, `backups`, `postgresql` et `secrets`.
+1. Téléchargez le kit de votre application dans la [dernière version](https://github.com/jegweb/diacamma-synology/releases/latest) : `diacamma-syndic-<version>.zip` ou `diacamma-asso-<version>.zip`. N'utilisez pas les fichiers affichés sur la page du dépôt : ils peuvent viser une version en préparation, pas encore publiée.
+2. Décompressez-le sur le NAS, dans `docker/diacamma-syndic` ou `docker/diacamma-asso`. Créez-y les dossiers `data`, `backups`, `postgresql` et `secrets`.
 3. Copiez `.env.example` en `.env` et renseignez au moins `DIACAMMA_ALLOWED_HOSTS`.
 4. Dans Container Manager, créez un projet à partir de ce dossier.
 5. Récupérez le mot de passe `admin` dans le journal du conteneur.
 
-Le détail de chaque étape est dans [Installation](#installation), et l'accès depuis Internet dans [Accès en HTTPS](#accès-en-https).
+Le détail de chaque étape est dans [Installation](#installation), et l'accès depuis Internet dans [Accès en HTTPS](#accès-en-https). Les exemples de ce guide sont ceux de Diacamma Syndic : pour Diacamma Asso, voir [Syndic ou Asso ?](#syndic-ou-asso-).
 
 ## Sommaire
 
-1. [Fonctionnement](#fonctionnement)
-2. [Prérequis](#prérequis)
-3. [Installation](#installation)
-4. [Accès en HTTPS](#accès-en-https)
-5. [Sauvegardes et restauration](#sauvegardes-et-restauration)
-6. [Mise à jour](#mise-à-jour)
-7. [Commandes d'administration](#commandes-dadministration)
-8. [Choix de la base de données](#choix-de-la-base-de-données)
-9. [Permissions (PUID/PGID)](#permissions-puidpgid)
-10. [Construire l'image soi-même](#construire-limage-soi-même)
-11. [Dépannage](#dépannage)
-12. [Sécurité : récapitulatif](#sécurité--récapitulatif)
-13. [Contribuer, licence](#contribuer-licence)
+1. [Syndic ou Asso ?](#syndic-ou-asso-)
+2. [Fonctionnement](#fonctionnement)
+3. [Prérequis](#prérequis)
+4. [Installation](#installation)
+5. [Accès en HTTPS](#accès-en-https)
+6. [Sauvegardes et restauration](#sauvegardes-et-restauration)
+7. [Mise à jour](#mise-à-jour)
+8. [Commandes d'administration](#commandes-dadministration)
+9. [Choix de la base de données](#choix-de-la-base-de-données)
+10. [Permissions (PUID/PGID)](#permissions-puidpgid)
+11. [Construire l'image soi-même](#construire-limage-soi-même)
+12. [Dépannage](#dépannage)
+13. [Sécurité : récapitulatif](#sécurité--récapitulatif)
+14. [Contribuer, licence](#contribuer-licence)
+
+## Syndic ou Asso ?
+
+Les deux applications utilisent la même image. Chacune a son kit, qui fixe l'application, les noms et le port :
+
+| | Diacamma Syndic (copropriété) | Diacamma Asso (association) |
+| --- | --- | --- |
+| Kit | `diacamma-syndic-<version>.zip` | `diacamma-asso-<version>.zip` |
+| Dossier et nom du projet | `docker/diacamma-syndic`, `diacamma-syndic` | `docker/diacamma-asso`, `diacamma-asso` |
+| Conteneurs | `diacamma-syndic`, `diacamma-syndic-sauvegarde`, `diacamma-syndic-db` | `diacamma-asso`, `diacamma-asso-sauvegarde`, `diacamma-asso-db` |
+| Port publié sur le NAS | 8100 | 8101 |
+| Instance et archives | `data/syndic/`, `auto_syndic_….lbk` | `data/asso/`, `auto_asso_….lbk` |
+
+**Les exemples de ce guide sont ceux de Diacamma Syndic.** Pour Diacamma Asso, remplacez `syndic` par `asso` dans les noms (dossier, conteneurs, commandes), et `8100` par `8101`. Par exemple, `sudo docker exec diacamma-syndic diacamma backup` devient `sudo docker exec diacamma-asso diacamma backup`.
+
+- Une installation correspond à une application. Pour utiliser les deux sur le même NAS, créez deux projets, chacun dans son dossier et avec son kit. Leurs ports différents leur permettent de fonctionner côte à côte, chacun avec son nom de domaine.
+- Un kit posé sur les données de l'autre application est refusé au démarrage, sans toucher aux données.
+- Une archive `.lbk` se restaure dans la même application : une archive de Diacamma Syndic ne passe pas dans Diacamma Asso.
 
 ## Fonctionnement
 
@@ -74,8 +93,8 @@ Le dépôt contient aussi de quoi construire l'image (`Dockerfile`, `requirement
 
 ### 1. Copier les fichiers sur le NAS
 
-1. Téléchargez le kit `diacamma-syndic-<version>.zip` depuis la page de la [dernière version](https://github.com/jegweb/diacamma-syndic-synology/releases/latest), rubrique **Assets**.
-2. Dans **File Station**, créez le dossier `docker/diacamma-syndic` (le dossier partagé `docker` est créé par Container Manager).
+1. Téléchargez le kit de votre application depuis la page de la [dernière version](https://github.com/jegweb/diacamma-synology/releases/latest), rubrique **Assets** : `diacamma-syndic-<version>.zip` ou `diacamma-asso-<version>.zip`.
+2. Dans **File Station**, créez le dossier `docker/diacamma-syndic`, ou `docker/diacamma-asso` (le dossier partagé `docker` est créé par Container Manager).
 3. Déposez-y le fichier `.zip`, puis faites un clic droit dessus → **Extraire** → **Extraire ici**. Vous obtenez `docker-compose.yml`, `docker-compose.sqlite.yml` et `.env.example`. Le `.zip` peut ensuite être supprimé.
 4. Créez-y quatre dossiers vides : `data`, `backups`, `postgresql` et `secrets`. Pour la variante SQLite, voir [Variante SQLite](#variante-sqlite).
 
@@ -123,13 +142,13 @@ Le compte par défaut de Diacamma (`admin` / `admin`) n'est jamais laissé actif
 
 ### 5. Premiers réglages dans Diacamma
 
-- Renseignez la fiche de la copropriété.
-- Configurez le serveur d'envoi de courriels (SMTP) dans les paramètres de Diacamma, pour les appels de fonds et les convocations. Les envois partent par lots, depuis le conteneur.
+- Renseignez la fiche de la copropriété ou de l'association.
+- Configurez le serveur d'envoi de courriels (SMTP) dans les paramètres de Diacamma, pour les appels de fonds, les convocations ou les relances de cotisation. Les envois partent par lots, depuis le conteneur.
 - Si vous utilisez une clé DKIM, placez-la dans `data/` (par exemple `data/dkim/cle.pem`) et indiquez le chemin vu par le conteneur : `/data/dkim/cle.pem`.
 
 ## Accès en HTTPS
 
-Le conteneur ne parle que **HTTP**, sur le port **8100** du NAS, et seulement pour le NAS lui-même (`127.0.0.1:8100:8000` dans `docker-compose.yml`). Le HTTPS est assuré par DSM, qui reçoit les visiteurs sur le port 443 et leur transmet les pages du conteneur :
+Le conteneur ne parle que **HTTP**, sur le port **8100** du NAS (**8101** pour Diacamma Asso), et seulement pour le NAS lui-même (`127.0.0.1:8100:8000` dans `docker-compose.yml`). Le HTTPS est assuré par DSM, qui reçoit les visiteurs sur le port 443 et leur transmet les pages du conteneur :
 
 ```text
 navigateur ──HTTPS, port 443──▶ DSM (Web Station, certificat) ──HTTP, port 8100──▶ conteneur
@@ -166,7 +185,7 @@ Même principe, sans Web Station. Utilisez l'un **ou** l'autre pour un même nom
    - Onglet **En-tête personnalisé** : ajoutez `X-Forwarded-Proto` avec la valeur `$scheme`.
    - Paramètres avancés : passez le délai de lecture du proxy à 300 secondes, pour les gros états PDF.
 2. **Panneau de configuration** → **Sécurité** → **Certificat** : obtenez un certificat Let's Encrypt pour `syndic.mondomaine.fr`, puis associez-le à cette entrée du proxy inversé (bouton **Paramètres**).
-3. Si des personnes doivent se connecter depuis Internet (copropriétaires, conseil syndical), redirigez le port 443 de votre box vers le NAS. Si l'usage reste interne, gardez l'accès limité au réseau local ou à un VPN.
+3. Si des personnes doivent se connecter depuis Internet (copropriétaires, conseil syndical, adhérents), redirigez le port 443 de votre box vers le NAS. Si l'usage reste interne, gardez l'accès limité au réseau local ou à un VPN.
 
 Votre box a un proxy inversé et vous voulez l'utiliser, par exemple parce que son port 443 sert déjà ? Faites-le pointer vers le proxy inversé de DSM (`https://<IP-du-NAS>:443`) en conservant l'en-tête `Host` d'origine. Le conteneur ne change pas.
 
@@ -242,7 +261,7 @@ Ces sauvegardes restent sur le NAS. Ajoutez le dossier `docker/diacamma-syndic` 
 
 ## Mise à jour
 
-Les versions s'écrivent `X.Y.Z-N` : `X.Y.Z` est la version de Diacamma, `N` la révision de l'empaquetage. Une révision peut seulement apporter les correctifs de sécurité de Debian et de Python : installez-les aussi. Pour être prévenu, cliquez sur **Watch** → **Custom** → **Releases** en haut de la page GitHub du projet.
+Les versions s'écrivent `X.Y.Z-N` : `X.Y.Z` est la version de Diacamma (Syndic et Asso sortent ensemble, avec le même numéro), `N` la révision de l'empaquetage. Une révision peut seulement apporter les correctifs de sécurité de Debian et de Python : installez-les aussi. Pour être prévenu, cliquez sur **Watch** → **Custom** → **Releases** en haut de la page GitHub du projet.
 
 1. Faites une sauvegarde : depuis l'interface, ou `sudo docker exec diacamma-syndic diacamma backup`.
 2. Lisez les notes de la nouvelle version, puis remplacez `docker-compose.yml` sur le NAS par le fichier du nouveau kit qui correspond à votre base :
@@ -263,6 +282,12 @@ Les versions s'écrivent `X.Y.Z-N` : `X.Y.Z` est la version de Diacamma, `N` la 
 
 4. Au démarrage, le conteneur détecte la nouvelle version. Avec SQLite, il prend d'abord un instantané. Il applique ensuite les migrations de la base, puis régénère les fichiers statiques. Suivez l'opération dans le journal.
 5. Supprimez l'ancienne image : **Container Manager** → **Image** → sélectionner l'image inutilisée → **Supprimer**.
+
+### Installations d'avant la version 2.7.10-4
+
+Depuis la version 2.7.10-4, l'image s'appelle `ghcr.io/jegweb/diacamma`, car elle contient aussi Diacamma Asso. Il n'y a rien de particulier à faire : le nouveau kit utilise ce nom, et la mise à jour se déroule comme ci-dessus. Depuis une version 2.7.10-1 à 2.7.10-3, Diacamma Syndic reste en version 2.7.10 : le conteneur n'applique aucune migration. Supprimez ensuite l'ancienne image `ghcr.io/jegweb/diacamma-syndic` (étape 5).
+
+L'ancien nom reste publié avec les mêmes versions : un `docker-compose.yml` dont on change seulement le numéro de version continue de fonctionner.
 
 ### Installations d'avant la version 2.7.10-3
 
@@ -307,9 +332,9 @@ Le kit propose deux variantes. L'image et les fonctions de Diacamma sont les mê
 | Dossiers à créer | `data`, `backups`, `postgresql`, `secrets` | `data`, `backups` |
 | Avant une mise à jour | Sauvegarde à faire soi-même | Instantané automatique, en plus de la sauvegarde |
 
-**Pourquoi PostgreSQL par défaut.** Diacamma est une application web : le syndic, le conseil syndical et les copropriétaires peuvent s'y connecter en même temps. Lucterios traite chaque requête dans une transaction. Avec SQLite, une écriture verrouille toute la base. Si deux personnes enregistrent en même temps, ou pendant une opération longue (clôture d'exercice, appels de fonds, envoi de courriels par lots, sauvegarde), l'une d'elles peut recevoir l'erreur « database is locked ». Sa saisie est alors perdue, mais pas les données déjà enregistrées. PostgreSQL ne verrouille que les lignes modifiées. C'est aussi la base retenue par le paquet YunoHost de Diacamma, maintenu par son auteur.
+**Pourquoi PostgreSQL par défaut.** Diacamma est une application web : le syndic, le conseil syndical et les copropriétaires, ou le bureau d'une association et ses adhérents, peuvent s'y connecter en même temps. Lucterios traite chaque requête dans une transaction. Avec SQLite, une écriture verrouille toute la base. Si deux personnes enregistrent en même temps, ou pendant une opération longue (clôture d'exercice, appels de fonds, renouvellement des adhésions, envoi de courriels par lots, sauvegarde), l'une d'elles peut recevoir l'erreur « database is locked ». Sa saisie est alors perdue, mais pas les données déjà enregistrées. PostgreSQL ne verrouille que les lignes modifiées. C'est aussi la base retenue par le paquet YunoHost de Diacamma, maintenu par son auteur.
 
-**Quand SQLite suffit.** Une seule personne saisit à la fois, par exemple un syndic bénévole seul, les copropriétaires se contentant de consulter. SQLite est la base des installations de bureau de Diacamma.
+**Quand SQLite suffit.** Une seule personne saisit à la fois, par exemple un syndic bénévole seul ou le trésorier d'une petite association, les autres se contentant de consulter. SQLite est la base des installations de bureau de Diacamma.
 
 **Pourquoi pas MariaDB ou MySQL.** Lucterios sait les utiliser, mais leurs changements de structure ne sont pas transactionnels : une mise à jour interrompue laisserait la base à moitié migrée, alors qu'avec PostgreSQL une migration qui échoue est annulée. Leurs comparaisons de texte ignorent aussi, par défaut, la casse et les accents. Le paquet MariaDB de Synology n'est pas utilisé : la base reste dans le projet, isolée.
 
@@ -363,12 +388,12 @@ Les conteneurs tournent sans privilèges, sous l'utilisateur `PUID:PGID` (par d�
 
 Utile si le NAS n'a pas accès à `ghcr.io`, ou pour tester une image modifiée. Il faut un ordinateur équipé de Docker et une copie de ce dépôt.
 
-1. Construisez l'image pour l'architecture du NAS : `scripts/build-image.sh amd64` (Intel/AMD) ou `scripts/build-image.sh arm64` (ARM). L'image porte le nom et la version écrits dans `docker-compose.yml`. Le script l'exporte dans `dist/diacamma-syndic-<version>-<arch>.tar`.
+1. Construisez l'image pour l'architecture du NAS : `scripts/build-image.sh amd64` (Intel/AMD) ou `scripts/build-image.sh arm64` (ARM). L'image porte le nom et la version écrits dans `docker-compose.yml`. Le script l'exporte dans `dist/diacamma-<version>-<arch>.tar`. La même image sert aux deux kits.
 2. Importez ce fichier : **Container Manager** → **Image** → **Ajouter** → **Ajouter à partir d'un fichier**.
 3. Dans `docker-compose.yml` sur le NAS, décommentez la ligne `# pull_policy: never` (retirez le `#`). Sans cela, Container Manager essaie de télécharger l'image et remplace la vôtre, ou échoue s'il n'a pas accès à Internet.
 4. Créez le projet comme d'habitude. S'il existe déjà : **Arrêter**, **Nettoyer**, puis **Créer**.
 
-Avec un accès SSH, vous pouvez aussi construire directement sur le NAS, depuis une copie du dépôt. Le nom de l'image doit être celui de la ligne `image:` du compose, par exemple : `sudo docker build -t ghcr.io/jegweb/diacamma-syndic:2.7.10-3 .`
+Avec un accès SSH, vous pouvez aussi construire directement sur le NAS, depuis une copie du dépôt. Le nom de l'image doit être celui de la ligne `image:` du compose, par exemple : `sudo docker build -t ghcr.io/jegweb/diacamma:2.7.10-4 .`
 
 ## Dépannage
 
@@ -378,7 +403,7 @@ Commencez par le journal du conteneur : **Container Manager** → **Conteneur** 
 sudo docker logs diacamma-syndic 2>&1 | grep '\[diacamma\]'
 ```
 
-Un démarrage normal se termine par `[diacamma] Démarrage de Diacamma Syndic (…, image X.Y.Z-N).`, suivi des lignes de gunicorn.
+Un démarrage normal se termine par `[diacamma] Démarrage de Diacamma Syndic (…, image X.Y.Z-N).` (ou `Diacamma Asso`), suivi des lignes de gunicorn.
 
 | Symptôme | Cause probable et solution |
 | --- | --- |
@@ -387,15 +412,16 @@ Un démarrage normal se termine par `[diacamma] Démarrage de Diacamma Syndic (�
 | « Build project … failed » avec « container diacamma-syndic is unhealthy » (ou `diacamma-syndic-db`) | Le conteneur `diacamma-syndic` s'arrête au démarrage. Ce message venait d'une ancienne version de `docker-compose.yml` : avec la version actuelle, le projet est créé et le conteneur apparaît « en redémarrage ». La cause est dans **son** journal (Container Manager → Conteneur → `diacamma-syndic` → Journal), sur les lignes `[diacamma] ERREUR`. Si le conteneur n'apparaît pas, lancez-le au premier plan en SSH, depuis le dossier du projet : `sudo docker compose up diacamma` (Ctrl+C pour arrêter). Le plus souvent, ce sont les droits sur les dossiers du projet (voir [Permissions](#permissions-puidpgid)). |
 | Le conteneur redémarre en boucle | Lisez son journal. Le message commence par `[diacamma] ERREUR`. |
 | « l'instance existante utilise SQLite, mais ce docker-compose.yml est celui de PostgreSQL » | Votre installation est en SQLite et le `docker-compose.yml` du kit a remplacé le vôtre. Prenez `docker-compose.sqlite.yml`, renommez-le en `docker-compose.yml`, puis **Nettoyer** et **Créer**. Supprimez les dossiers `postgresql` et `secrets` s'ils ont été créés. Pour passer à PostgreSQL, voir [Changer de base de données](#changer-de-base-de-données). |
+| « … mais ce kit est celui de Diacamma Asso » (ou de Diacamma Syndic) | Le dossier contient les données de l'autre application : le kit n'est pas le bon. Remettez le `docker-compose.yml` du kit de votre application, puis **Nettoyer** et **Créer**. Pour installer la seconde application à côté, créez un projet séparé (voir [Syndic ou Asso ?](#syndic-ou-asso-)). Les données n'ont pas été modifiées. |
 | « En attente de la base PostgreSQL » qui se répète, puis « la base PostgreSQL … ne répond pas » | Lisez le journal de `diacamma-syndic-db`. Le plus souvent, `postgresql` ou `secrets` ont été créés par Docker et appartiennent à `root` (voir [Permissions](#permissions-puidpgid)). |
 | « [diacamma-db] ERREUR : la base existe déjà dans postgresql/, mais secrets/db_password.txt manque » | Le fichier a été supprimé. Recréez-le à partir de la copie gardée par Diacamma. En SSH, depuis le dossier du projet : `sudo grep -o '"PASSWORD": "[^"]*' data/syndic/settings.py \| cut -d'"' -f4 \| sudo tee secrets/db_password.txt >/dev/null`, puis `sudo chown 1026:100 secrets/db_password.txt && sudo chmod 600 secrets/db_password.txt` (vos `PUID:PGID`). Redémarrez ensuite le projet. |
 | « PostgreSQL refuse le mot de passe de secrets/db_password.txt » | Le fichier a été remplacé ou modifié après la création de la base. Recréez-le comme dans la ligne précédente. |
 | « LegalEntity matching query does not exist » à chaque connexion, après une restauration | La restauration a été interrompue, le plus souvent par un redémarrage du conteneur pendant qu'elle tournait : la base est vide. Relancez-la en SSH, `sudo docker exec diacamma-syndic diacamma restore <archive>.lbk`, attendez `[diacamma] Restauration terminée`, puis redémarrez le conteneur. |
 | Dans le journal de `diacamma-syndic-db` : « relation "CORE_parameter" does not exist » ou « the database system is starting up » au premier démarrage, « chmod: changing permissions of '/run/postgresql': Operation not permitted », ou « violates foreign key constraint » pendant une restauration | Sans conséquence. Lucterios interroge ses paramètres avant de créer les tables, et vide les tables sans tenir compte de leur ordre avant une restauration (PostgreSQL signale chaque tentative refusée). La base tourne sans droits root, dans un dossier déjà accessible. |
 | « SyntaxWarning: invalid escape sequence » ou « Your models in app(s): … have changes that are not yet reflected in a migration » à chaque démarrage | Sans conséquence : ces messages viennent du code de Diacamma et Lucterios eux-mêmes. Ne lancez pas `makemigrations`. |
-| « pull access denied » ou « denied » | Si le message cite `diacamma-syndic` sans `ghcr.io`, votre `docker-compose.yml` vient d'une ancienne version, qui construisait l'image sur le NAS : remplacez-le par celui du kit (voir [Mise à jour](#mise-à-jour)). S'il cite `ghcr.io/jegweb/diacamma-syndic`, l'image n'est pas accessible publiquement : signalez-le dans un ticket. |
+| « pull access denied » ou « denied » | Si le message cite `diacamma-syndic` sans `ghcr.io`, votre `docker-compose.yml` vient d'une ancienne version, qui construisait l'image sur le NAS : remplacez-le par celui du kit (voir [Mise à jour](#mise-à-jour)). S'il cite `ghcr.io/jegweb/diacamma` ou `ghcr.io/jegweb/diacamma-syndic`, l'image n'est pas accessible publiquement : signalez-le dans un ticket. |
 | « Error » lors du téléchargement de l'image (« Pulling ») | Container Manager n'affiche pas la cause. Pour la voir, en SSH depuis le dossier du projet : `sudo docker compose pull`. |
-| « manifest unknown » | La version écrite à la fin de la ligne `image:` de `docker-compose.yml` n'existe pas. Le plus souvent, le fichier a été copié depuis la page du dépôt au lieu du kit de la Release ; or il peut viser une version en préparation. Prenez le fichier du kit, ou corrigez la version d'après les [Releases](https://github.com/jegweb/diacamma-syndic-synology/releases), puis **Nettoyer** et **Créer**. |
+| « manifest unknown » | La version écrite à la fin de la ligne `image:` de `docker-compose.yml` n'existe pas. Le plus souvent, le fichier a été copié depuis la page du dépôt au lieu du kit de la Release ; or il peut viser une version en préparation. Prenez le fichier du kit, ou corrigez la version d'après les [Releases](https://github.com/jegweb/diacamma-synology/releases), puis **Nettoyer** et **Créer**. |
 | « no such host », « i/o timeout » ou « x509: certificate » lors du téléchargement | Le NAS n'arrive pas à joindre `ghcr.io` : vérifiez son DNS, son accès à Internet et son horloge (Panneau de configuration → Options régionales). À défaut, voir [Construire l'image soi-même](#construire-limage-soi-même). |
 | Une image importée est remplacée ou ignorée | Décommentez `pull_policy: never` dans `docker-compose.yml` (voir [Construire l'image soi-même](#construire-limage-soi-même)). |
 
@@ -424,10 +450,10 @@ Pour signaler une faille, voir [SECURITY.md](SECURITY.md) ; ne publiez pas de ti
 
 ## Contribuer, licence
 
-Les retours d'installation, questions et corrections sont les bienvenus : voir [CONTRIBUTING.md](CONTRIBUTING.md). Les questions vont dans les [Discussions](https://github.com/jegweb/diacamma-syndic-synology/discussions), les problèmes du conteneur dans les tickets.
+Les retours d'installation, questions et corrections sont les bienvenus : voir [CONTRIBUTING.md](CONTRIBUTING.md). Les questions vont dans les [Discussions](https://github.com/jegweb/diacamma-synology/discussions), les problèmes du conteneur dans les tickets.
 
-Pour l'application Diacamma elle-même, adressez-vous à l'équipe Diacamma : les questions d'utilisation sur son [forum](https://forum.diacamma.org), les bogues dans [ses tickets](https://github.com/Diacamma2/syndic/issues).
+Pour l'application Diacamma elle-même, adressez-vous à l'équipe Diacamma : les questions d'utilisation sur son [forum](https://forum.diacamma.org), les bogues dans ses tickets, ceux de [Diacamma Syndic](https://github.com/Diacamma2/syndic/issues) ou de [Diacamma Asso](https://github.com/Diacamma2/asso/issues).
 
 Ce projet (Dockerfile, scripts, fichiers Compose, documentation) est distribué sous licence **GPL-3.0-or-later** : voir [LICENSE](LICENSE). Copyright (C) 2026 jegweb.
 
-Diacamma Syndic et le framework Lucterios, inclus dans l'image, sont des logiciels libres publiés par leurs auteurs sous leurs propres licences. Ce projet ne fait que les empaqueter, sans les modifier.
+Diacamma Syndic, Diacamma Asso et le framework Lucterios, inclus dans l'image, sont des logiciels libres publiés par leurs auteurs sous leurs propres licences. Ce projet ne fait que les empaqueter, sans les modifier.

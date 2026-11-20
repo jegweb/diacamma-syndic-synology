@@ -3,16 +3,19 @@
 # la connexion, les protections (admin/admin, /static/, hôte inconnu) et les
 # commandes de sauvegarde et de restauration. Code de retour non nul en cas d'échec.
 #
-# Usage : scripts/smoke-test.sh [--sqlite] [--depuis <ancienne image>] [image]
+# Usage : scripts/smoke-test.sh [--asso] [--sqlite] [--depuis <ancienne image>] [image]
 #   image : image à tester (défaut : celle du compose).
+#   --asso : kit Diacamma Asso (produit par scripts/kit.sh) au lieu de Syndic.
 #   --sqlite : variante SQLite (docker-compose.sqlite.yml) au lieu de PostgreSQL.
-#     Vérifie aussi qu'un compose PostgreSQL est refusé sur une instance SQLite.
+#     Vérifie aussi qu'un compose PostgreSQL est refusé sur une instance SQLite,
+#     et que le kit de l'autre application est refusé sur ces données.
 #   --depuis : installe d'abord l'ancienne image, puis passe à la nouvelle, comme
 #     un utilisateur qui met à jour. Vérifie la détection de la mise à jour, les
 #     migrations et l'instantané SQLite (si les versions des paquets diffèrent).
 #   Exemples :
-#     docker build -t diacamma-syndic:local . && scripts/smoke-test.sh diacamma-syndic:local
-#     scripts/smoke-test.sh --depuis ghcr.io/jegweb/diacamma-syndic:latest diacamma-syndic:local
+#     docker build -t diacamma:local . && scripts/smoke-test.sh diacamma:local
+#     scripts/smoke-test.sh --asso diacamma:local
+#     scripts/smoke-test.sh --depuis ghcr.io/jegweb/diacamma-syndic:latest diacamma:local
 # Variable : SMOKE_TIMEOUT, délai maximal d'attente de l'état « healthy » (600 s).
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -22,23 +25,28 @@ fail() { printf '[test] ÉCHEC : %s\n' "$*" >&2; exit 1; }
 
 ENGINE=postgresql
 COMPOSE_SRC=docker-compose.yml
+APPLI=syndic
 FROM_IMAGE=""
 while (( $# > 0 )); do
   case "$1" in
+    --asso) APPLI=asso; shift ;;
     --sqlite) ENGINE=sqlite; COMPOSE_SRC=docker-compose.sqlite.yml; shift ;;
     --depuis) FROM_IMAGE="${2:-}"; [[ -n "$FROM_IMAGE" ]] || fail "--depuis demande une image."; shift 2 ;;
     -*) fail "option inconnue : $1" ;;
     *) break ;;
   esac
 done
-IMAGE="${1:-$(sed -nE 's/^ *image: *([^ ]*diacamma-syndic[^ ]*).*/\1/p' "$COMPOSE_SRC" | head -n 1)}"
+IMAGE="${1:-$(sed -nE 's/^ *image: *([^ ]*\/diacamma:[^ ]*).*/\1/p' "$COMPOSE_SRC" | head -n 1)}"
 TIMEOUT="${SMOKE_TIMEOUT:-600}"
-HOST=syndic.example.test
+HOST="$APPLI.example.test"
 PASSWORD=MotDePasseDeTest-2026
-URL=http://127.0.0.1:8100
-APP=diacamma-syndic
+# Ports publiés par les kits : 8100 pour Syndic, 8101 pour Asso.
+if [[ "$APPLI" == asso ]]; then URL=http://127.0.0.1:8101; else URL=http://127.0.0.1:8100; fi
+APP="diacamma-$APPLI"
+# L'autre application : son kit doit être refusé sur ces données (--sqlite).
+if [[ "$APPLI" == asso ]]; then OTHER=syndic; else OTHER=asso; fi
 
-for name in "$APP" "$APP-sauvegarde" "$APP-db"; do
+for name in "$APP" "$APP-sauvegarde" "$APP-db" "diacamma-$OTHER" "diacamma-$OTHER-sauvegarde"; do
   if docker ps -a --format '{{.Names}}' | grep -x "$name" >/dev/null; then
     fail "un conteneur « $name » existe déjà sur cette machine : supprimez-le avant le test."
   fi
@@ -59,16 +67,28 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "$T/data" "$T/backups"
-cp "$COMPOSE_SRC" "$T/docker-compose.yml"
+# Les fichiers viennent du kit de l'application, comme pour un utilisateur.
+scripts/kit.sh "$APPLI" "$T/kit" >/dev/null
+cp "$T/kit/$COMPOSE_SRC" "$T/docker-compose.yml"
 # Remplace l'image des services Diacamma (pas celle de PostgreSQL).
 set_image() {
-  sed -i.orig -E "s|^( *image: *)[^ ]*diacamma-syndic[^ ]*|\1$1|" "$T/docker-compose.yml"
+  sed -i.orig -E "s|^( *image: *)[^ ]*diacamma[^ ]*|\1$1|" "$T/docker-compose.yml"
   rm -f "$T/docker-compose.yml.orig"
 }
-build_id() {
+pull_if_needed() {
   docker image inspect "$1" >/dev/null 2>&1 || docker pull -q "$1" >/dev/null
-  docker run --rm --entrypoint cat "$1" /opt/diacamma/diacamma-build-id
 }
+# Les images d'avant 2.7.10-4 n'ont qu'un identifiant, celui de Syndic.
+build_id() {
+  pull_if_needed "$1"
+  docker run --rm --entrypoint sh "$1" -c \
+    "cat /opt/diacamma/build-id/$APPLI 2>/dev/null || cat /opt/diacamma/diacamma-build-id"
+}
+if [[ -n "$FROM_IMAGE" && "$APPLI" == asso ]]; then
+  pull_if_needed "$FROM_IMAGE"
+  docker run --rm --entrypoint test "$FROM_IMAGE" -e /opt/diacamma/build-id/asso \
+    || fail "$FROM_IMAGE ne contient pas Diacamma Asso : pas de mise à jour à tester."
+fi
 {
   echo "DIACAMMA_ALLOWED_HOSTS=$HOST"
   echo "DIACAMMA_ADMIN_PASSWORD=$PASSWORD"
@@ -130,7 +150,7 @@ check_login() {
   log "OK : connexion admin."
 }
 
-log "Dossier de test : $T ($COMPOSE_SRC, image $IMAGE${FROM_IMAGE:+, depuis $FROM_IMAGE})"
+log "Dossier de test : $T (kit $APPLI, $COMPOSE_SRC, image $IMAGE${FROM_IMAGE:+, depuis $FROM_IMAGE})"
 if [[ -n "$FROM_IMAGE" ]]; then
   set_image "$FROM_IMAGE"
   [[ "$ENGINE" == sqlite ]] || start_db_first
@@ -147,7 +167,7 @@ if [[ -n "$FROM_IMAGE" ]]; then
     docker logs "$APP" 2>&1 | grep -F "Mise à jour détectée : $old_id -> $new_id" >/dev/null \
       || fail "la mise à jour $old_id -> $new_id n'a pas été détectée."
     if [[ "$ENGINE" == sqlite ]]; then
-      find "$T/backups/avant-mise-a-jour" -name 'syndic_*.tar.gz' 2>/dev/null | grep . >/dev/null \
+      find "$T/backups/avant-mise-a-jour" -name "${APPLI}_*.tar.gz" 2>/dev/null | grep . >/dev/null \
         || fail "aucun instantané dans backups/avant-mise-a-jour/."
       log "OK : instantané SQLite pris avant la mise à jour."
     else
@@ -189,7 +209,7 @@ log "OK : hôte inconnu → 400."
 
 docker exec "$APP" diacamma version
 docker exec "$APP" diacamma backup
-archive="$(find "$T/backups" -maxdepth 1 -name 'manuel_syndic_*.lbk' -exec basename {} \; | head -n 1)"
+archive="$(find "$T/backups" -maxdepth 1 -name "manuel_${APPLI}_*.lbk" -exec basename {} \; | head -n 1)"
 [[ -n "$archive" ]] || fail "aucune archive manuelle créée dans backups/."
 log "OK : archive $archive créée."
 docker exec "$APP" diacamma restore "$archive" 2>&1 | tee "$T/restauration.log"
@@ -201,22 +221,40 @@ docker restart "$APP" >/dev/null
 check_login
 log "OK : restauration puis redémarrage."
 
+# Attend le message de refus $2 dans le journal du conteneur $1.
+wait_refusal() {
+  local tries=0
+  until docker logs "$1" 2>&1 | grep -F "$2" >/dev/null; do
+    (( ++tries < 30 )) || return 1
+    sleep 3
+  done
+}
 # Utilisateur SQLite qui prend par erreur le compose PostgreSQL du kit (sans
 # créer postgresql/ ni secrets/) : refus explicite, base intacte.
 if [[ "$ENGINE" == sqlite ]]; then
   compose down >/dev/null 2>&1
-  before="$(cksum < "$T/data/syndic/db.sqlite3")"
-  cp docker-compose.yml "$T/docker-compose.yml"
+  database="$T/data/$APPLI/db.sqlite3"
+  before="$(cksum < "$database")"
+  cp "$T/kit/docker-compose.yml" "$T/docker-compose.yml"
   set_image "$IMAGE"
   compose up -d --quiet-pull
-  tries=0
-  until docker logs "$APP" 2>&1 | grep -F "prenez docker-compose.sqlite.yml" >/dev/null; do
-    (( ++tries < 30 )) || fail "le compose PostgreSQL n'est pas refusé sur une instance SQLite."
-    sleep 3
-  done
-  compose stop >/dev/null 2>&1
-  [[ "$(cksum < "$T/data/syndic/db.sqlite3")" == "$before" ]] || fail "la base SQLite a été modifiée par le compose PostgreSQL."
+  wait_refusal "$APP" "prenez docker-compose.sqlite.yml" \
+    || fail "le compose PostgreSQL n'est pas refusé sur une instance SQLite."
+  compose down >/dev/null 2>&1
+  [[ "$(cksum < "$database")" == "$before" ]] || fail "la base SQLite a été modifiée par le compose PostgreSQL."
   log "OK : compose PostgreSQL refusé sur une instance SQLite, base intacte."
+
+  # Kit de l'autre application posé sur ces données : refus, base intacte.
+  scripts/kit.sh "$OTHER" "$T/autre-kit" >/dev/null
+  cp "$T/autre-kit/docker-compose.sqlite.yml" "$T/docker-compose.yml"
+  set_image "$IMAGE"
+  compose up -d --quiet-pull
+  wait_refusal "diacamma-$OTHER" "mais ce kit est celui de" \
+    || fail "le kit $OTHER n'est pas refusé sur les données de $APPLI."
+  compose down >/dev/null 2>&1
+  [[ "$(cksum < "$database")" == "$before" ]] || fail "la base SQLite a été modifiée par le kit $OTHER."
+  [[ ! -e "$T/data/$OTHER" ]] || fail "le kit $OTHER a créé une instance dans les données de $APPLI."
+  log "OK : kit $OTHER refusé sur les données de $APPLI, base intacte."
 fi
 
 log "Tous les contrôles sont passés."

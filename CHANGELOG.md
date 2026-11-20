@@ -1,8 +1,24 @@
 # Journal des modifications
 
-Les versions s'écrivent `X.Y.Z-N` : `X.Y.Z` est la version de Diacamma Syndic incluse, `N` la révision de l'empaquetage. Une révision peut corriger le conteneur ou simplement reconstruire l'image avec les correctifs de sécurité de Debian et de Python.
+Les versions s'écrivent `X.Y.Z-N` : `X.Y.Z` est la version de Diacamma incluse (Diacamma Syndic et, depuis 2.7.10-4, Diacamma Asso, qui sortent ensemble), `N` la révision de l'empaquetage. Une révision peut corriger le conteneur ou simplement reconstruire l'image avec les correctifs de sécurité de Debian et de Python.
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/).
+
+## [2.7.10-4]
+
+Diacamma Asso rejoint le projet. Diacamma Syndic et Lucterios restent en version 2.7.10 : pour les installations existantes, la mise à jour ne lance aucune migration.
+
+**Installations Diacamma Syndic existantes** : rien de particulier, la mise à jour se fait comme d'habitude avec le kit `diacamma-syndic`. L'image change de nom (voir ci-dessous) ; l'ancienne peut être supprimée ensuite.
+
+### Ajouté
+
+- **Diacamma Asso 2.7.10** (gestion d'association : adhérents, cotisations, événements, facturation). Il a son propre kit, `diacamma-asso-<version>.zip`, avec les mêmes garanties que Syndic : PostgreSQL ou SQLite, sauvegardes, durcissement. Son port publié est 8101, pour qu'il puisse fonctionner sur le même NAS que Diacamma Syndic (8100). Le README explique les différences dans la section « Syndic ou Asso ? ».
+- Un kit posé sur les données de l'autre application (Asso sur Syndic, ou l'inverse) est refusé au démarrage, avec un message explicite et sans toucher aux données.
+
+### Modifié
+
+- L'image s'appelle désormais `ghcr.io/jegweb/diacamma` : elle contient les deux applications, et le kit choisit laquelle utiliser (`DIACAMMA_APPLI`). Les mêmes versions restent publiées sous l'ancien nom, `ghcr.io/jegweb/diacamma-syndic`.
+- Le dépôt s'appelle désormais `jegweb/diacamma-synology`. Les anciens liens sont redirigés par GitHub.
 
 ## [2.7.10-3] - 2026-11-20
 

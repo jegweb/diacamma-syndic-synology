@@ -24,7 +24,7 @@ jobs:
       - name: Analyse de la dernière version publiée
         run: |
           set -o pipefail
-          image="$(sed -nE 's/^ *image: *([^ :]*diacamma-syndic):.*/\1/p' docker-compose.yml | head -n 1):latest"
+          image="$(sed -nE 's/^ *image: *([^ :]*\/diacamma):.*/\1/p' docker-compose.yml | head -n 1):latest"
           echo "Image analysée : $image"
           docker run --rm "$TRIVY" image --quiet --image-src remote --platform linux/amd64 \
             --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed \

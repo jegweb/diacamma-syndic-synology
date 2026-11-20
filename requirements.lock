@@ -1,4 +1,4 @@
-# Généré par scripts/update-lock.sh le 2026-11-19 avec python:3.13-slim-trixie.
+# Généré par scripts/update-lock.sh le 2026-11-20 avec python:3.13-slim-trixie.
 # Ne pas modifier à la main. PyQt6 (interface de bureau) est volontairement exclu.
 aiosmtpd==1.4.6
 APScheduler==3.11.3
@@ -13,6 +13,7 @@ cffi==2.1.1
 charset-normalizer==3.5.2
 cssselect2==0.10.1
 defusedxml==0.7.1
+diacamma-asso==2.7.10.26100815
 diacamma-financial==2.7.10.26102815
 diacamma-syndic==2.7.10.26102007
 digital-invoice==0.9.6.1793202079
@@ -23,7 +24,7 @@ dkimpy==1.1.8
 dnspython==2.9.2
 et_xmlfile==2.0.0
 etherpad-lite==0.5
-factur-x==7.9
+factur-x==7.10
 gunicorn==26.2.0
 html2text==2025.4.15
 idna==3.20

@@ -1,10 +1,10 @@
 # Sécurité
 
-Diacamma Syndic contient des données personnelles (copropriétaires, comptes bancaires, documents) et ce projet l'expose souvent sur Internet. Les failles sont donc prises au sérieux.
+Diacamma contient des données personnelles (copropriétaires ou adhérents, comptes bancaires, documents) et ce projet l'expose souvent sur Internet. Les failles sont donc prises au sérieux.
 
 ## Signaler une faille
 
-**Ne publiez pas de ticket public.** Utilisez le signalement privé de GitHub : onglet **Security** du dépôt → **Report a vulnerability**, ou directement [ce formulaire](https://github.com/jegweb/diacamma-syndic-synology/security/advisories/new).
+**Ne publiez pas de ticket public.** Utilisez le signalement privé de GitHub : onglet **Security** du dépôt → **Report a vulnerability**, ou directement [ce formulaire](https://github.com/jegweb/diacamma-synology/security/advisories/new).
 
 Indiquez la version de l'image (`diacamma version`), la configuration concernée et, si possible, comment reproduire le problème.
 

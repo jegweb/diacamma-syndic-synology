@@ -4,34 +4,36 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Objectif du projet
 
-Image Docker et projet Compose pour déployer **Diacamma Syndic** (gestion de copropriété, framework Python/Django **Lucterios**) dans **Synology Container Manager** (DSM 7.2+, NAS amd64 ou arm64). Priorités : déploiement simple, sécurisé, sans perte de fonctionnalités de l'application. `README.md` est le guide utilisateur (en français) : le tenir à jour à chaque changement de comportement.
+Image Docker et projets Compose pour déployer **Diacamma Syndic** (gestion de copropriété) et **Diacamma Asso** (gestion d'association), deux applications du framework Python/Django **Lucterios**, dans **Synology Container Manager** (DSM 7.2+, NAS amd64 ou arm64). Une seule image contient les deux ; chaque kit fixe l'application avec `DIACAMMA_APPLI`. Priorités : déploiement simple, sécurisé, sans perte de fonctionnalités de l'application. `README.md` est le guide utilisateur (en français) : le tenir à jour à chaque changement de comportement.
 
 L'utilisateur travaille en français : réponses, commentaires, messages du conteneur et documentation en français.
 
 ## Commandes
 
 ```sh
-docker build -t diacamma-syndic:local .                     # construire l'image (arch locale)
-docker build --platform linux/amd64 -t diacamma-syndic:amd64-test .   # vérifier l'autre architecture
-scripts/smoke-test.sh diacamma-syndic:local                 # test de fumée PostgreSQL (ajouter --sqlite pour l'autre variante)
-scripts/smoke-test.sh --depuis ghcr.io/jegweb/diacamma-syndic:latest diacamma-syndic:local   # test de mise à jour
+docker build -t diacamma:local .                            # construire l'image (arch locale)
+docker build --platform linux/amd64 -t diacamma:amd64-test .   # vérifier l'autre architecture
+scripts/smoke-test.sh diacamma:local                        # test de fumée Syndic, PostgreSQL (--sqlite pour l'autre variante)
+scripts/smoke-test.sh --asso diacamma:local                 # même test avec le kit Asso
+scripts/smoke-test.sh --depuis ghcr.io/jegweb/diacamma-syndic:latest diacamma:local   # test de mise à jour
+scripts/kit.sh asso <dossier> [image:tag]                   # fichiers du kit Asso (dérivés de ceux de Syndic)
 scripts/update-lock.sh                                      # régénérer requirements.lock depuis requirements.in
 scripts/build-image.sh amd64                                # image exportée en dist/*.tar pour import dans Container Manager
 docker run --rm -v "$PWD:/mnt:ro" koalaman/shellcheck:stable docker/bin/diacamma scripts/*.sh   # lint shell
 ```
 
-Il n'y a pas de suite de tests unitaires. `scripts/smoke-test.sh [--sqlite] [--depuis <image>] <image>` lance le projet dans un dossier jetable, en dehors du dépôt pour ne pas y créer `data/` et `backups/`. Il remplace la ligne `image:` du compose par l'image locale indiquée, puis vérifie :
+Il n'y a pas de suite de tests unitaires. `scripts/smoke-test.sh [--asso] [--sqlite] [--depuis <image>] <image>` lance le projet dans un dossier jetable, en dehors du dépôt pour ne pas y créer `data/` et `backups/`. Il prend les fichiers produits par `scripts/kit.sh`, remplace la ligne `image:` du compose par l'image locale indiquée, puis vérifie :
 
 - la connexion avec le mot de passe fourni, et le refus de `admin`/`admin` ;
 - `/static/settings.py` et `/static/db.sqlite3` en 404, un hôte inconnu en 400 ;
 - `backup`, puis `restore` suivi d'un redémarrage ;
-- en PostgreSQL, le mot de passe généré dans `secrets/` ; avec `--sqlite`, le refus du compose PostgreSQL sur une instance SQLite, base intacte.
+- en PostgreSQL, le mot de passe généré dans `secrets/` ; avec `--sqlite`, le refus du compose PostgreSQL sur une instance SQLite, puis celui du kit de l'autre application, base intacte.
 
-La CI (`.github/workflows/ci.yml`) le lance sur chaque push et chaque pull request, et chaque mois sans cache. Pour un essai manuel, la connexion se teste ainsi :
+La CI (`.github/workflows/ci.yml`) le lance sur chaque push et chaque pull request, et chaque mois sans cache, en six variantes (dont `asso` et `mise-a-jour-asso`). Pour un essai manuel, la connexion se teste ainsi :
 
 ```sh
 curl -s -H 'Host: syndic.example.test' -X POST --data 'login=admin&password=MotDePasseDeTest-2026' \
-  http://127.0.0.1:8100/CORE/authentification    # "data": "OK" si la connexion réussit, "BADAUTH" sinon
+  http://127.0.0.1:8100/CORE/authentification    # "data": "OK" si la connexion réussit, "BADAUTH" sinon (Asso : asso.example.test, port 8101)
 ```
 
 Container Manager embarque un Docker plus ancien que celui du Mac (Docker 24, Compose 2.19 ou 2.20). Pour tester un changement du compose ou du Dockerfile dans ces conditions, utiliser un moteur isolé, avec dans `$T` un compose et un `.env` :
@@ -44,24 +46,26 @@ docker exec -w /project dind24 docker compose up -d
 
 ### Publication
 
-L'image est publiée sur `ghcr.io/jegweb/diacamma-syndic`. Versions `X.Y.Z-N` : version de Diacamma, puis révision de l'empaquetage. La procédure complète est dans `CONTRIBUTING.md`.
+L'image est publiée sur `ghcr.io/jegweb/diacamma` (dépôt `jegweb/diacamma-synology`), et sous l'alias `ghcr.io/jegweb/diacamma-syndic`, nom d'avant 2.7.10-4, avec les mêmes tags. Versions `X.Y.Z-N` : version de Diacamma (Syndic et Asso sortent ensemble, même `X.Y.Z`), puis révision de l'empaquetage. La procédure complète est dans `CONTRIBUTING.md`.
 
-- Le tag d'image est écrit en dur dans **les deux** compose.
+- Le tag d'image est écrit en dur dans **les deux** compose (ceux de Syndic ; le kit Asso en est dérivé).
 - **Plafonds prudents** (`requirements.in`) : une dépendance indirecte que l'amont ne limite pas, et dont une version majeure est sortie après la version amont de Diacamma, est plafonnée sous cette majeure. Les règles complètes sont dans CONTRIBUTING, étape 1. Le Dockerfile lance `pip check` : seule l'absence de PyQt6 est tolérée.
-- Test de mise à jour : `smoke-test.sh [--sqlite] --depuis <image publiée>`. La CI (variantes `mise-a-jour` et `mise-a-jour-sqlite`) et la publication le lancent depuis `:latest`, pour les deux bases.
+- Test de mise à jour : `smoke-test.sh [--sqlite] --depuis <image publiée>`. La CI (variantes `mise-a-jour` et `mise-a-jour-sqlite`) et la publication le lancent pour Syndic depuis l'alias `diacamma-syndic:latest`, pour les deux bases. Pour Asso (`--asso --depuis`), depuis `diacamma:latest` quand elle contient Asso ; sinon une installation SQLite d'Asso le remplace.
 - `scan.yml` : analyse Trivy hebdomadaire de `:latest`, avec une version de Trivy épinglée à la main. Seuil : HIGH/CRITICAL, failles corrigées seulement. La réponse attendue à un échec est une révision `-N+1` (procédure dans CONTRIBUTING).
-- Une étiquette Git `vX.Y.Z-N` (ou `-rcM`) lance `.github/workflows/release.yml`. Il vérifie la cohérence (étiquette, compose, `requirements.lock`, entrée `## [X.Y.Z-N]` du CHANGELOG), puis construit et teste sur des runners natifs amd64 et arm64.
-- Il pousse l'image testée sous `X.Y.Z-N-<arch>`, assemble le manifeste multi-architecture (`X.Y.Z-N`, puis `X.Y.Z` et `latest` hors pré-version) et crée la Release avec le kit `.zip` (deux compose et `.env.example`).
+- Une étiquette Git `vX.Y.Z-N` (ou `-rcM`) lance `.github/workflows/release.yml`. Il vérifie la cohérence (étiquette, compose, `diacamma-syndic` et `diacamma-asso` à `X.Y.Z` dans `requirements.lock`, entrée `## [X.Y.Z-N]` du CHANGELOG), puis construit et teste sur des runners natifs amd64 et arm64.
+- Il pousse l'image testée sous `X.Y.Z-N-<arch>`, assemble le manifeste multi-architecture (`X.Y.Z-N`, puis `X.Y.Z` et `latest` hors pré-version), le recopie sous l'alias `-syndic`, et crée la Release avec deux kits `.zip` produits par `scripts/kit.sh` (`diacamma-syndic-…` et `diacamma-asso-…`, chacun avec deux compose et `.env.example`).
+- Un nouveau paquet GHCR créé par le workflow est privé : le passer en public à la main après son premier envoi.
 - Images sans attestation (`provenance`/`sbom` désactivés), pour le Docker 24 de Container Manager.
 - Une version définitive est annoncée par une discussion dans la catégorie `ANNONCES` (« Annonces »), seulement si cette catégorie existe. Le formulaire `.github/DISCUSSION_TEMPLATE/questions-et-aide.yml` doit porter le nom (slug) de la catégorie « Questions et aide ».
-- `ARG VERSION` donne `DIACAMMA_IMAGE_VERSION`, affiché par `diacamma version`. Elle n'entre pas dans `diacamma-build-id` : une révision sans changement de paquets ne déclenche pas de migration.
+- `ARG VERSION` donne `DIACAMMA_IMAGE_VERSION`, affiché par `diacamma version`. Elle n'entre pas dans les identifiants de build (`/opt/diacamma/build-id/<appli>`) : une révision sans changement de paquets ne déclenche pas de migration.
 
 ## Architecture
 
-- `Dockerfile` : construction en deux étapes sur `python:3.13-slim-trixie`. Trixie est obligatoire : les roues aarch64 exigent glibc ≥ 2.39. Le verrou est installé avec `pip install --no-deps -r requirements.lock`. **PyQt6 est volontairement exclu** du verrou : c'est une dépendance déclarée de `lucterios`, mais elle ne sert qu'à l'interface de bureau. Exécution sous l'UID:GID 1026:100, avec `tini` comme PID 1. L'étape finale lance `apt-get upgrade` et **retire pip**, du venv comme du Python système. pip ne sert qu'à `lucterios_admin check/update`, et ses bibliothèques embarquées étaient signalées par Trivy. L'interface n'appelle `lucterios_admin` que pour `archive` et `restore`.
-- `docker/bin/diacamma` : point d'entrée et outil d'administration (`serve`, `backup`, `backup-daemon`, `restore`, `reset-admin-password`, `version`, `manage`, `admin`). Il pilote `python -m lucterios.install.lucterios_admin … -i /data`.
+- `Dockerfile` : construction en deux étapes sur `python:3.13-slim-trixie`. Elle écrit un identifiant de build par application, `/opt/diacamma/build-id/{syndic,asso}` (versions de `diacamma-<appli>`, `diacamma-financial`, `lucterios`, `lucterios-contacts`, `lucterios-documents`). Celui de Syndic garde le format de l'ancien `diacamma-build-id` : ne pas changer cette liste, sinon chaque installation existante verrait une fausse mise à jour. Trixie est obligatoire : les roues aarch64 exigent glibc ≥ 2.39. Le verrou est installé avec `pip install --no-deps -r requirements.lock`. **PyQt6 est volontairement exclu** du verrou : c'est une dépendance déclarée de `lucterios`, mais elle ne sert qu'à l'interface de bureau. Exécution sous l'UID:GID 1026:100, avec `tini` comme PID 1. L'étape finale lance `apt-get upgrade` et **retire pip**, du venv comme du Python système. pip ne sert qu'à `lucterios_admin check/update`, et ses bibliothèques embarquées étaient signalées par Trivy. L'interface n'appelle `lucterios_admin` que pour `archive` et `restore`.
+- `docker/bin/diacamma` : point d'entrée et outil d'administration (`serve`, `backup`, `backup-daemon`, `restore`, `reset-admin-password`, `version`, `manage`, `admin`). Il pilote `python -m lucterios.install.lucterios_admin … -i /data`. `DIACAMMA_APPLI` (`syndic` par défaut, pour les compose d'avant 2.7.10-4, ou `asso`) fixe le paquet de l'application, ses modules, le nom de l'instance (`DIACAMMA_INSTANCE`, par défaut celui de l'application) et l'identifiant de build. `check_appli` refuse de démarrer, avant tout contact avec la base, si `settings.py` désigne une autre application (`fill_appli_settings("diacamma.…")`) ou si `/data` contient un autre `manage_*.py`. Sinon un kit Asso posé sur des données Syndic en PostgreSQL créerait son instance dans la base de Syndic.
 - `docker/lib/diacamma_docker.py` : fonctions Python appelées par le script (`extra-settings`, `secure-admin`, `clean-static`, `snapshot-sqlite`). `diacamma_wsgi.py` enveloppe l'application Lucterios avec WhiteNoise. `healthcheck.py` est la sonde de santé.
-- `docker-compose.yml` (PostgreSQL, recommandé depuis 2.7.10-3) et `docker-compose.sqlite.yml` : deux services avec la même image, téléchargée depuis ghcr.io, plus `db` (`postgres:17`, réseau `backend` interne) pour PostgreSQL. `diacamma` sert l'application ; `sauvegarde` lance `backup-daemon`. Jusqu'à 2.7.10-2, `docker-compose.yml` était la variante SQLite : les installations sans dossier `postgresql/` sont en SQLite. Le refus de démarrer sur un moteur différent (`update_instance`) protège celles qui prennent le mauvais fichier. Durcissement : `read_only`, `cap_drop: ALL`, `no-new-privileges`, port publié sur `127.0.0.1`. Toute la configuration passe par `.env` (voir `.env.example`).
+- `docker-compose.yml` (PostgreSQL, recommandé depuis 2.7.10-3) et `docker-compose.sqlite.yml` : ceux de Syndic, avec `DIACAMMA_APPLI: syndic` en valeur fixe. Deux services avec la même image, téléchargée depuis ghcr.io, plus `db` (`postgres:17`, réseau `backend` interne) pour PostgreSQL.
+- `scripts/kit.sh <syndic|asso> <dossier> [image:tag]` : fichiers d'un kit. Ceux d'Asso ne sont pas versionnés : ils sont dérivés par substitutions (`diacamma-asso`, `DIACAMMA_APPLI: asso`, `data/asso/`, `asso.mondomaine.fr`, port **8101** pour cohabiter avec Syndic sur un même NAS). Le script échoue s'il reste `syndic`, `Diacamma Syndic` ou `8100` dans le kit Asso : un texte propre à Syndic ajouté au compose doit avoir sa substitution (« Syndic ou Asso » avec une majuscule est permis). `diacamma` sert l'application ; `sauvegarde` lance `backup-daemon`. Jusqu'à 2.7.10-2, `docker-compose.yml` était la variante SQLite : les installations sans dossier `postgresql/` sont en SQLite. Le refus de démarrer sur un moteur différent (`update_instance`) protège celles qui prennent le mauvais fichier. Durcissement : `read_only`, `cap_drop: ALL`, `no-new-privileges`, port publié sur `127.0.0.1`. Toute la configuration passe par `.env` (voir `.env.example`).
 
 ### Contraintes propres à Synology (constatées sur un NAS Synology, noyau 4.4)
 
@@ -97,8 +101,11 @@ Une mise à jour est détectée quand ce marqueur **existe** et diffère de `/op
 - **Langue** : `set_locale_lang('fr')` repasse silencieusement en anglais si la locale `fr_FR.UTF-8` n'est pas générée dans l'image.
 - **Compte par défaut** : la migration CORE 0001 crée `admin`/`admin`. `secure-admin` le remplace à chaque démarrage et après chaque restauration.
 - **Données** : toutes les données de l'instance sont dans `/data/<instance>/` (`settings.py`, `db.sqlite3`, `usr/` pour les documents, `static/`, `tmp/`, `django_cache/`). `BACKUP_DIRECTORY=/backups` active la gestion des archives `.lbk` dans l'interface.
-- **Modules requis** : `lucterios-standard` doit être installé, car `lucterios_admin` l'importe dans `setup_from_none`. Liste des modules de l'instance : `lucterios.contacts,lucterios.documents,lucterios.mailing,diacamma.accounting,diacamma.payoff,diacamma.condominium`.
+- **Modules requis** : `lucterios-standard` doit être installé, car `lucterios_admin` l'importe dans `setup_from_none`. Modules de l'instance, repris du paquet YunoHost et identiques à `diacamma.<appli>.link()` :
+  - Syndic (`diacamma.syndic`) : `lucterios.contacts,lucterios.documents,lucterios.mailing,diacamma.accounting,diacamma.payoff,diacamma.condominium` ;
+  - Asso (`diacamma.asso`) : `lucterios.contacts,lucterios.documents,lucterios.mailing,diacamma.accounting,diacamma.payoff,diacamma.invoice,diacamma.member,diacamma.event`.
+- **Deux applications** : `diacamma-asso` n'apporte que `diacamma.asso`, `diacamma.member` et `diacamma.event` (`diacamma.invoice` est dans `diacamma-financial`). Les deux paquets sortent le même jour avec le même `X.Y.Z` et les mêmes dépendances. Une instance a une seule application ; une archive `.lbk` se restaure dans la même application.
 
 ### Référence amont
 
-Le paquet YunoHost (`https://git.yunohost.org/YunoHost-Apps/diacamma_ynh`), maintenu par l'auteur de Diacamma, sert de référence pour les conventions de déploiement. Il utilise gunicorn avec 1 worker, `--timeout 600`, un `collectstatic` suivi d'un nettoyage, et `lucterios_admin check/update/refreshall` pour les mises à jour. Les sources des paquets sont publiées sur PyPI sous forme de roues.
+Le paquet YunoHost (`https://git.yunohost.org/YunoHost-Apps/diacamma_ynh`), maintenu par l'auteur de Diacamma, sert de référence pour les conventions de déploiement. Il installe `diacamma-asso` et `diacamma-syndic` dans le même venv et choisit l'application à l'installation (`lct_appli`), comme `DIACAMMA_APPLI` ici. Il utilise gunicorn avec 1 worker, `--timeout 600`, un `collectstatic` suivi d'un nettoyage, et `lucterios_admin check/update/refreshall` pour les mises à jour. Les sources des paquets sont publiées sur PyPI sous forme de roues.

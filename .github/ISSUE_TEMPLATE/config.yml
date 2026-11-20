@@ -1,11 +1,14 @@
 blank_issues_enabled: false
 contact_links:
   - name: Question ou aide à l'installation
-    url: https://github.com/jegweb/diacamma-syndic-synology/discussions/categories/questions-et-aide
+    url: https://github.com/jegweb/diacamma-synology/discussions/categories/questions-et-aide
     about: Posez vos questions dans les Discussions (catégorie « Questions et aide ») plutôt que dans un ticket.
-  - name: Problème de l'application Diacamma elle-même
+  - name: Problème de Diacamma Syndic lui-même
     url: https://github.com/Diacamma2/syndic/issues
     about: Comptabilité, appels de fonds, impressions… Ces fonctions relèvent de l'équipe Diacamma. Bogues dans ses tickets, questions sur son forum (forum.diacamma.org).
+  - name: Problème de Diacamma Asso lui-même
+    url: https://github.com/Diacamma2/asso/issues
+    about: Adhérents, cotisations, événements, comptabilité… Ces fonctions relèvent de l'équipe Diacamma. Bogues dans ses tickets, questions sur son forum (forum.diacamma.org).
   - name: Faille de sécurité
-    url: https://github.com/jegweb/diacamma-syndic-synology/security/advisories/new
+    url: https://github.com/jegweb/diacamma-synology/security/advisories/new
     about: Signalez-la en privé, jamais dans un ticket public (voir SECURITY.md).

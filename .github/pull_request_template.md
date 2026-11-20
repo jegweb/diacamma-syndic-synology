@@ -4,7 +4,7 @@
 
 ## Vérifications
 
-- [ ] `scripts/smoke-test.sh` passe ; avec `--sqlite` aussi si le changement touche la base, avec `--depuis ghcr.io/jegweb/diacamma-syndic:latest` s'il touche l'image ou la mise à jour
+- [ ] `scripts/smoke-test.sh` passe ; avec `--sqlite` aussi si le changement touche la base, avec `--asso` s'il touche le compose ou le script d'entrée, avec `--depuis ghcr.io/jegweb/diacamma-syndic:latest` s'il touche l'image ou la mise à jour
 - [ ] ShellCheck passe (commande dans CONTRIBUTING.md)
 - [ ] Le README est à jour si le comportement visible change
 - [ ] Les contraintes de Container Manager décrites dans CLAUDE.md sont respectées : pas de section `logging`, port publié en valeur fixe, pas de `pids_limit`, dépendance `service_started`

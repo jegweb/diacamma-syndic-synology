@@ -1,6 +1,7 @@
 # Publication d'une version : étiquette Git vX.Y.Z-N (ou vX.Y.Z-N-rcM pour une
 # pré-version). Construit et teste l'image sur amd64 et arm64 (runners natifs),
-# la publie sur ghcr.io, puis crée la Release GitHub avec le kit d'installation.
+# la publie sur ghcr.io (avec l'alias <image>-syndic, nom d'avant 2.7.10-4),
+# puis crée la Release GitHub avec un kit d'installation par application.
 name: Publication
 
 on:
@@ -31,13 +32,16 @@ jobs:
           version="${GITHUB_REF_NAME#v}"
           image=""
           for f in docker-compose.yml docker-compose.sqlite.yml; do
-            ref="$(sed -nE 's/^ *image: *(ghcr\.io\/[^ ]*diacamma-syndic:[^ ]+).*/\1/p' "$f" | head -n 1)"
+            ref="$(sed -nE 's/^ *image: *(ghcr\.io\/[^ ]*\/diacamma:[^ ]+).*/\1/p' "$f" | head -n 1)"
             [[ "${ref##*:}" == "$base" ]] || err "$f référence « $ref » au lieu de la version $base."
             [[ -z "$image" || "$image" == "${ref%:*}" ]] || err "Les deux compose ne référencent pas la même image."
             image="${ref%:*}"
           done
-          grep -qiE "^diacamma-syndic==${upstream//./\\.}(\.|$)" requirements.lock \
-            || err "requirements.lock ne contient pas diacamma-syndic $upstream."
+          # Les deux applications sortent ensemble, avec le même numéro.
+          for paquet in diacamma-syndic diacamma-asso; do
+            grep -qiE "^$paquet==${upstream//./\\.}(\.|$)" requirements.lock \
+              || err "requirements.lock ne contient pas $paquet $upstream."
+          done
           grep -qF "## [$base]" CHANGELOG.md || err "CHANGELOG.md n'a pas d'entrée « ## [$base] »."
           prerelease=false
           [[ "$version" == "$base" ]] || prerelease=true
@@ -81,16 +85,28 @@ jobs:
           build-args: VERSION=${{ env.VERSION }}
           tags: ${{ env.IMAGE }}:${{ env.VERSION }}-${{ matrix.arch }}
       - name: Test de fumée
-        run: scripts/smoke-test.sh "$IMAGE:$VERSION-${{ matrix.arch }}"
+        run: |
+          scripts/smoke-test.sh "$IMAGE:$VERSION-${{ matrix.arch }}"
+          scripts/smoke-test.sh --asso "$IMAGE:$VERSION-${{ matrix.arch }}"
       - name: Test de mise à jour depuis la dernière version publiée
         run: |
-          if docker buildx imagetools inspect "$IMAGE:latest" >/dev/null 2>&1; then
-            scripts/smoke-test.sh --depuis "$IMAGE:latest" "$IMAGE:$VERSION-${{ matrix.arch }}"
+          new="$IMAGE:$VERSION-${{ matrix.arch }}"
+          # Installations Syndic existantes : alias -syndic, seul nom de l'image
+          # avant 2.7.10-4.
+          if docker buildx imagetools inspect "$IMAGE-syndic:latest" >/dev/null 2>&1; then
+            scripts/smoke-test.sh --depuis "$IMAGE-syndic:latest" "$new"
             # Installations SQLite existantes ; couvre aussi les contrôles SQLite.
-            scripts/smoke-test.sh --sqlite --depuis "$IMAGE:latest" "$IMAGE:$VERSION-${{ matrix.arch }}"
+            scripts/smoke-test.sh --sqlite --depuis "$IMAGE-syndic:latest" "$new"
           else
             echo "Aucune version publiée : test de mise à jour remplacé par une installation SQLite."
-            scripts/smoke-test.sh --sqlite "$IMAGE:$VERSION-${{ matrix.arch }}"
+            scripts/smoke-test.sh --sqlite "$new"
+          fi
+          if docker pull -q "$IMAGE:latest" >/dev/null 2>&1 \
+            && docker run --rm --entrypoint test "$IMAGE:latest" -e /opt/diacamma/build-id/asso; then
+            scripts/smoke-test.sh --asso --depuis "$IMAGE:latest" "$new"
+          else
+            echo "::notice::$IMAGE:latest absente ou sans Diacamma Asso : installation SQLite d'Asso à la place."
+            scripts/smoke-test.sh --asso --sqlite "$new"
           fi
       - uses: docker/login-action@v4
         with:
@@ -133,26 +149,31 @@ jobs:
           fi
           docker buildx imagetools create "${tags[@]}" "$IMAGE:$VERSION-amd64" "$IMAGE:$VERSION-arm64"
           docker buildx imagetools inspect "$IMAGE:$VERSION"
-      - name: Kit d'installation
+          # Mêmes tags sous l'alias <image>-syndic : les compose d'avant 2.7.10-4
+          # et les tests de mise à jour de Syndic s'y réfèrent.
+          docker buildx imagetools create "${tags[@]//$IMAGE:/$IMAGE-syndic:}" "$IMAGE:$VERSION"
+          docker buildx imagetools inspect "$IMAGE-syndic:$VERSION"
+      - name: Kits d'installation
         run: |
-          kit="diacamma-syndic-$VERSION"
-          mkdir -p "dist/$kit"
-          for f in docker-compose.yml docker-compose.sqlite.yml; do
-            sed -E "s|^( *image: *)ghcr\.io/[^ ]*diacamma-syndic:[^ ]+|\1$IMAGE:$VERSION|" "$f" > "dist/$kit/$f"
+          for appli in syndic asso; do
+            kit="diacamma-$appli-$VERSION"
+            scripts/kit.sh "$appli" "dist/$kit" "$IMAGE:$VERSION"
+            (cd "dist/$kit" && zip -X "../$kit.zip" docker-compose.yml docker-compose.sqlite.yml .env.example)
+            unzip -l "dist/$kit.zip"
           done
-          cp .env.example "dist/$kit/"
-          (cd "dist/$kit" && zip -X "../$kit.zip" docker-compose.yml docker-compose.sqlite.yml .env.example)
-          unzip -l "dist/$kit.zip"
       - name: Release GitHub
         run: |
-          kit="diacamma-syndic-$VERSION"
           {
             awk -v h="## [$BASE]" 'index($0, h) == 1 { f = 1; next } f && /^## \[/ { exit } f' CHANGELOG.md
             echo
             echo "### Installation"
             echo
-            echo "Téléchargez \`$kit.zip\` ci-dessous et suivez le [README](https://github.com/$GITHUB_REPOSITORY#installation)."
-            echo "Image : \`$IMAGE:$VERSION\` (amd64 et arm64)."
+            echo "Téléchargez le kit de votre application ci-dessous, puis suivez le [README](https://github.com/$GITHUB_REPOSITORY#installation) :"
+            echo
+            echo "- Diacamma Syndic (copropriété) : \`diacamma-syndic-$VERSION.zip\` ;"
+            echo "- Diacamma Asso (association) : \`diacamma-asso-$VERSION.zip\`."
+            echo
+            echo "Image : \`$IMAGE:$VERSION\` (amd64 et arm64), aussi publiée sous \`$IMAGE-syndic:$VERSION\`."
           } > notes.md
           flags=()
           if [[ "$PRERELEASE" == true ]]; then
@@ -172,5 +193,5 @@ jobs:
               echo "::warning::Catégorie de Discussions « $ANNONCES » introuvable : pas d'annonce créée."
             fi
           fi
-          gh release create "$GITHUB_REF_NAME" "dist/$kit.zip" \
-            --title "Diacamma Syndic $VERSION" --notes-file notes.md "${flags[@]}"
+          gh release create "$GITHUB_REF_NAME" "dist/diacamma-syndic-$VERSION.zip" "dist/diacamma-asso-$VERSION.zip" \
+            --title "Diacamma $VERSION (Syndic et Asso)" --notes-file notes.md "${flags[@]}"

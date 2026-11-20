@@ -1,4 +1,4 @@
-"""Outils internes du conteneur Diacamma Syndic, appelés par bin/diacamma.
+"""Outils internes du conteneur Diacamma (Syndic ou Asso), appelés par bin/diacamma.
 
 Usage : python diacamma_docker.py <commande> [arguments]
 """
@@ -288,6 +288,9 @@ def wait_postgresql(timeout=300):
 
     host = os.environ.get('DIACAMMA_DB_HOST', '')
     port = os.environ.get('DIACAMMA_DB_PORT', '5432')
+    # Exportés par bin/diacamma ; ils ne servent qu'aux messages.
+    appli = os.environ.get('DIACAMMA_APPLI', 'syndic')
+    instance = os.environ.get('DIACAMMA_INSTANCE', appli)
     params = {
         'host': host, 'port': port, 'connect_timeout': 5,
         'dbname': os.environ.get('DIACAMMA_DB_NAME', ''),
@@ -307,13 +310,13 @@ def wait_postgresql(timeout=300):
             if 'password authentication failed' in detail:
                 fail('PostgreSQL refuse le mot de passe de secrets/db_password.txt : la base du dossier '
                      'postgresql/ a été créée avec un autre mot de passe. Le bon est gardé dans '
-                     'data/syndic/settings.py : recréez le fichier à partir de lui (README, « Dépannage »).')
+                     f'data/{instance}/settings.py : recréez le fichier à partir de lui (README, « Dépannage »).')
             if 'does not exist' in detail:
                 fail(f'la base du dossier postgresql/ ne correspond pas à ce projet : {detail}')
         elapsed = time.monotonic() - start
         if elapsed >= timeout:
             fail(f'la base PostgreSQL ({host}:{port}) ne répond pas après {timeout} s. Consultez le journal '
-                 'du conteneur diacamma-syndic-db : le plus souvent, les dossiers postgresql ou secrets '
+                 f'du conteneur diacamma-{appli}-db : le plus souvent, les dossiers postgresql ou secrets '
                  f'n\'ont pas été créés avec File Station (README, « Permissions »). Détail : {detail}')
         if elapsed >= next_log:
             log(f'En attente de la base PostgreSQL ({host}:{port})…')
