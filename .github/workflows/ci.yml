@@ -15,7 +15,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  # Une file par PR (head_ref) ou par branche : l'exécution d'une PR que l'on
+  # vient de fusionner ne doit pas annuler celle de main.
+  group: ci-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -51,7 +53,8 @@ jobs:
           build-args: VERSION=ci
           tags: diacamma:ci
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Cache impossible à écrire (PR déjà fusionnée…) : sans effet sur le test.
+          cache-to: type=gha,mode=max,ignore-error=true
       - name: Test de fumée
         env:
           VARIANT: ${{ matrix.variant }}
