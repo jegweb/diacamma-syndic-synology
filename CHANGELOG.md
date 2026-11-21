@@ -4,6 +4,17 @@ Les versions s'écrivent `X.Y.Z-N` : `X.Y.Z` est la version de Diacamma incluse 
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/).
 
+## [Non publié]
+
+### Ajouté
+
+- `HORS-SYNOLOGY.md` : installation sur un autre hôte Docker (serveur Linux, VPS, autre NAS), avec `docker compose`, un proxy inverse Caddy ou nginx et ses propres `PUID`/`PGID`. Le README y renvoie.
+
+### Modifié
+
+- L'ancien nom de l'image, `ghcr.io/jegweb/diacamma-syndic`, ne reçoit plus les nouvelles versions : il garde celles publiées jusqu'à 2.7.10-4, pour les anciens kits et le retour en arrière. Un `docker-compose.yml` qui porte encore ce nom ne se met donc pas à jour en changeant seulement le numéro de version (« manifest unknown ») : prenez celui du kit. Les outils qui surveillent ce nom (Watchtower…) ne verront plus de nouvelle version : faites-leur suivre `ghcr.io/jegweb/diacamma`.
+- Les messages d'erreur sur les droits des dossiers, ceux de Diacamma comme celui de la base, ne supposent plus un NAS Synology : les consignes propres à DSM et File Station y sont signalées comme telles, et la correction pour SELinux est indiquée.
+
 ## [2.7.10-4] - 2026-11-20
 
 Diacamma Asso rejoint le projet. Diacamma Syndic et Lucterios restent en version 2.7.10 : pour les installations existantes, la mise à jour ne lance aucune migration.

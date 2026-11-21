@@ -344,7 +344,8 @@ def wait_postgresql(timeout=300):
         if elapsed >= timeout:
             fail(f'la base PostgreSQL ({where}) ne répond pas après {timeout} s. Consultez le journal '
                  'du conteneur de la base (nom en -db) : le plus souvent, les dossiers postgresql ou secrets '
-                 f'n\'ont pas été créés avec File Station (README, « Permissions »). Détail : {detail}')
+                 'ont été créés par Docker au lieu de vous-même (avec File Station sur Synology) : '
+                 f'voir README, « Permissions ». Détail : {detail}')
         if elapsed >= next_log:
             log(f'En attente de la base PostgreSQL ({where})…')
             next_log += 15

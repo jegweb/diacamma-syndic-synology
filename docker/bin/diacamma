@@ -61,18 +61,19 @@ permission_error() {
   owner="$(stat -c '%u:%g' "$path" 2>/dev/null || echo inconnu)"
   log "ERREUR : $path (propriétaire $owner) n'est pas accessible en écriture pour l'utilisateur $me du conteneur."
   if [[ "${owner%%:*}" == "$(id -u)" ]]; then
-    # Propriétaire correct mais écriture refusée : ACL DSM. Le conteneur n'a
-    # pas les groupes secondaires du compte (administrators…).
-    log "Il appartient bien à cet utilisateur : ce sont ses droits ou les ACL de DSM qui refusent l'écriture."
-    log "Solution : en SSH, depuis le dossier du projet sur le NAS : sudo chmod -R u+rwX data backups"
-    log "Si cela ne suffit pas (ACL) : File Station > clic droit sur le dossier du projet > Propriétés > Autorisation : donner Lecture/Écriture à ce compte (pas seulement via un groupe), appliquer aux sous-dossiers et fichiers."
+    # Propriétaire correct mais écriture refusée : ACL (DSM) ou SELinux. Le
+    # conteneur n'a pas les groupes secondaires du compte (administrators…).
+    log "Il appartient bien à cet utilisateur : ce sont ses droits, des ACL (celles de DSM sur Synology) ou SELinux qui refusent l'écriture."
+    log "Solution : depuis le dossier du projet (en SSH sur un NAS) : sudo chmod -R u+rwX data backups"
+    log "Avec SELinux (Fedora, RHEL…) : sudo chcon -R -t container_file_t data backups"
+    log "Sur Synology, si cela ne suffit pas (ACL) : File Station > clic droit sur le dossier du projet > Propriétés > Autorisation : donner Lecture/Écriture à ce compte (pas seulement via un groupe), appliquer aux sous-dossiers et fichiers."
   else
-    log "Solution : en SSH, depuis le dossier du projet sur le NAS : sudo chown -R $me data backups"
+    log "Solution : depuis le dossier du projet (en SSH sur un NAS) : sudo chown -R $me data backups"
     if [[ "$owner" != 0:* && "$owner" != inconnu ]]; then
       log "Ou bien indiquez PUID=${owner%%:*} et PGID=${owner##*:} dans .env, puis redémarrez le projet."
     fi
   fi
-  die "voir README, section « Permissions »."
+  die "voir README, section « Permissions », ou HORS-SYNOLOGY.md hors Synology (https://github.com/jegweb/diacamma-synology)."
 }
 
 check_writable() {

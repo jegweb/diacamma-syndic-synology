@@ -26,14 +26,14 @@ body:
   - type: input
     id: nas
     attributes:
-      label: Modèle du NAS et version de DSM
-      placeholder: "ex. DS220+, DSM 7.2.2"
+      label: Modèle du NAS et version de DSM (ou système et version de Docker)
+      placeholder: "ex. DS220+, DSM 7.2.2 ; ou Debian 13, Docker 28"
     validations:
       required: true
   - type: dropdown
     id: arch
     attributes:
-      label: Processeur du NAS
+      label: Processeur du NAS (ou de la machine)
       options:
         - Intel/AMD (x86_64)
         - ARM 64 bits (aarch64)

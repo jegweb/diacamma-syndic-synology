@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Objectif du projet
 
-Image Docker et projets Compose pour déployer **Diacamma Syndic** (gestion de copropriété) et **Diacamma Asso** (gestion d'association), deux applications du framework Python/Django **Lucterios**, dans **Synology Container Manager** (DSM 7.2+, NAS amd64 ou arm64). Une seule image contient les deux ; chaque kit fixe l'application avec `DIACAMMA_APPLI`. Priorités : déploiement simple, sécurisé, sans perte de fonctionnalités de l'application. `README.md` est le guide utilisateur (en français) : le tenir à jour à chaque changement de comportement.
+Image Docker et projets Compose pour déployer **Diacamma Syndic** (gestion de copropriété) et **Diacamma Asso** (gestion d'association), deux applications du framework Python/Django **Lucterios**, dans **Synology Container Manager** (DSM 7.2+, NAS amd64 ou arm64). Une seule image contient les deux ; chaque kit fixe l'application avec `DIACAMMA_APPLI`. Priorités : déploiement simple, sécurisé, sans perte de fonctionnalités de l'application. `README.md` est le guide utilisateur (en français) : le tenir à jour à chaque changement de comportement. `HORS-SYNOLOGY.md` donne les consignes pour les autres hôtes Docker (`docker compose`, proxy inverse, `PUID`/`PGID`) : le tenir à jour lui aussi.
 
 L'utilisateur travaille en français : réponses, commentaires, messages du conteneur et documentation en français.
 

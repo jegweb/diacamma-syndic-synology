@@ -14,7 +14,7 @@ Lisez la partie « Architecture » de [CLAUDE.md](CLAUDE.md). Elle explique les 
 - les **contraintes de Container Manager** : pas de section `logging`, port publié en valeur fixe, pas de `pids_limit`, `service_started` ;
 - les **protections contre les particularités de Lucterios** : `collectstatic` avec ses exclusions et `clean-static`, un seul worker gunicorn, remplacement de `admin`/`admin`.
 
-Ne retirez pas une protection sans comprendre pourquoi elle existe. Si un comportement de l'utilisateur change, mettez à jour le README dans la même modification.
+Ne retirez pas une protection sans comprendre pourquoi elle existe. Si un comportement de l'utilisateur change, mettez à jour le README dans la même modification, ainsi que [HORS-SYNOLOGY.md](HORS-SYNOLOGY.md) (installation sur d'autres hôtes Docker) si une commande, un port ou un réglage y figure.
 
 **Deux applications, une image.** L'image contient Diacamma Syndic et Diacamma Asso ; `DIACAMMA_APPLI`, fixé dans le compose, choisit l'application. Les fichiers du dépôt (`docker-compose.yml`, `docker-compose.sqlite.yml`, `.env.example`) sont ceux de Syndic. Ceux d'Asso n'existent que dans son kit : `scripts/kit.sh asso <dossier>` les produit par substitutions (noms, `DIACAMMA_APPLI`, port 8101), et échoue s'il reste une référence à Syndic. Si vous ajoutez au compose un texte propre à Syndic, complétez les substitutions.
 
