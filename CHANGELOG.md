@@ -4,7 +4,9 @@ Les versions s'écrivent `X.Y.Z-N` : `X.Y.Z` est la version de Diacamma incluse 
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/).
 
-## [Non publié]
+## [2.7.10-5]
+
+Révision de l'empaquetage. Les versions de Diacamma Syndic, Diacamma Asso et Lucterios sont les mêmes que dans 2.7.10-4 : la mise à jour ne lance aucune migration. L'image est reconstruite avec les derniers correctifs de sécurité de Debian et de Python.
 
 ### Ajouté
 
