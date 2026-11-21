@@ -422,7 +422,7 @@ Utile si le NAS n'a pas accès à `ghcr.io`, ou pour tester une image modifiée.
 3. Dans `docker-compose.yml` sur le NAS, décommentez la ligne `# pull_policy: never` (retirez le `#`). Sans cela, Container Manager essaie de télécharger l'image et remplace la vôtre, ou échoue s'il n'a pas accès à Internet.
 4. Créez le projet comme d'habitude. S'il existe déjà : **Arrêter**, **Nettoyer**, puis **Créer**.
 
-Avec un accès SSH, vous pouvez aussi construire directement sur le NAS, depuis une copie du dépôt. Le nom de l'image doit être celui de la ligne `image:` du compose, par exemple : `sudo docker build -t ghcr.io/jegweb/diacamma:2.7.10-4 .`
+Avec un accès SSH, vous pouvez aussi construire directement sur le NAS, depuis une copie du dépôt. Le nom de l'image doit être celui de la ligne `image:` du compose, par exemple : `sudo docker build -t ghcr.io/jegweb/diacamma:2.7.10-5 .`
 
 ## Dépannage
 
