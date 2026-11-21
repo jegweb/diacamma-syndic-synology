@@ -71,7 +71,7 @@ services:
             exit 1
           fi
           if ! (umask 077 && tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 32 > "$$f.tmp" && mv "$$f.tmp" "$$f"); then
-            echo "[diacamma-db] ERREUR : impossible d'écrire dans le dossier secrets. Créez-le vous-même avec File Station (README, « Permissions »)." >&2
+            echo "[diacamma-db] ERREUR : impossible d'écrire dans le dossier secrets. Créez-le vous-même avec votre compte (sur Synology : avec File Station), voir README, « Permissions »." >&2
             exit 1
           fi
           echo "[diacamma-db] Mot de passe de la base créé dans secrets/db_password.txt : laissez ce fichier en place."

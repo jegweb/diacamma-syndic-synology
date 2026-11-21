@@ -4,6 +4,8 @@
 
 Ce projet fournit de quoi déployer [Diacamma](https://www.diacamma.org) (logiciel libre GPL) dans **Container Manager** sur un NAS Synology, pour ses deux applications : **Diacamma Syndic** (gestion de copropriété) et **Diacamma Asso** (gestion d'association). Il comprend une image Docker prête à l'emploi (Intel/AMD et ARM 64 bits), un projet Compose par application et des sauvegardes automatiques. Toutes les fonctions sont conservées : comptabilité, appels de fonds ou adhésions et cotisations, documents, courriels, impressions PDF, archives et restauration depuis l'interface.
 
+> **Sans NAS Synology** (serveur Linux, VPS, NAS d'une autre marque) : l'image et les kits fonctionnent sur tout hôte Docker. Voir [HORS-SYNOLOGY.md](HORS-SYNOLOGY.md).
+
 Versions incluses : Diacamma Syndic 2.7.10, Diacamma Asso 2.7.10 et Lucterios 2.7.10, sur Python 3.13 (Debian 13 « trixie »). Les dépendances sont figées dans `requirements.lock`. L'image, commune aux deux applications, est publiée sur `ghcr.io/jegweb/diacamma` ; les nouveautés sont dans le [journal des modifications](CHANGELOG.md).
 
 ## Démarrage rapide
@@ -99,7 +101,7 @@ Le dépôt contient aussi de quoi construire l'image (`Dockerfile`, `requirement
 
 ## Prérequis
 
-- DSM 7.2 ou plus récent, avec le paquet **Container Manager**.
+- DSM 7.2 ou plus récent, avec le paquet **Container Manager** (sans Synology : voir [HORS-SYNOLOGY.md](HORS-SYNOLOGY.md)).
 - Un NAS 64 bits : Intel/AMD (`x86_64`) ou ARM 64 bits (`aarch64`).
 - Environ 3 Go d'espace disque pour les images (Diacamma et PostgreSQL) et 300 Mo de mémoire vive. En test, au repos, l'application occupe environ 120 Mo et la base environ 30 Mo.
 - Un accès Internet depuis le NAS vers `ghcr.io`, pour télécharger l'image. Sans lui, voir [Construire l'image soi-même](#construire-limage-soi-même).
